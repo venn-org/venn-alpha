@@ -29,7 +29,7 @@ export default function EmailSignIn() {
     try {
       const { error } = await supabase.auth.signInWithOtp({ email });
       if (error) {
-        setError(error.message);
+        setError(error.message || error.error_description || JSON.stringify(error));
       } else {
         router.push(`/(auth)/email-otp?email=${encodeURIComponent(email)}`);
       }
