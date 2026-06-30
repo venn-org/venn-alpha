@@ -104,19 +104,53 @@ function ProfileOverlay({ like, visible, onClose, onPass, onLike }) {
               </TouchableOpacity>
             </View>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 32 }}>
-            {photo ? (
-              <Image source={{ uri: photo }} style={s.overlayPhoto} resizeMode="cover" />
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 32, gap: 10 }}>
+            {/* Photos */}
+            {Array.isArray(profile.photos) && profile.photos.length > 0 ? (
+              profile.photos.map((p, i) => (
+                <Image key={i} source={{ uri: p }} style={[s.overlayPhoto, i > 0 && { marginTop: 8 }]} resizeMode="cover" />
+              ))
             ) : (
               <View style={[s.overlayPhoto, { backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center' }]}>
                 <Ionicons name="person" size={64} color={colors.mist} />
               </View>
             )}
+
+            {/* Name + age */}
             <Text style={s.overlayName}>{profile.name}{age ? `, ${age}` : ''}</Text>
-            {profile.gender && <Text style={s.overlayMeta}>{profile.gender}</Text>}
-            {Array.isArray(profile.preferred_areas) && profile.preferred_areas.length > 0 && (
-              <Text style={s.overlayMeta}>{profile.preferred_areas.join(', ')}</Text>
-            )}
+
+            {/* Info chips */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {profile.gender ? <View style={s.chip}><Text style={s.chipText}>👤 {profile.gender}</Text></View> : null}
+              {profile.budget ? <View style={s.chip}><Text style={s.chipText}>💰 {profile.budget}</Text></View> : null}
+              {Array.isArray(profile.preferred_areas) && profile.preferred_areas.length > 0 && (
+                <View style={s.chip}><Text style={s.chipText}>📍 {profile.preferred_areas.join(', ')}</Text></View>
+              )}
+            </View>
+
+            {/* Work & Education */}
+            {(profile.job_title || profile.job_company) ? (
+              <View style={s.infoRow}>
+                <Ionicons name="briefcase-outline" size={15} color="#9AA0B2" />
+                <Text style={s.infoText}>{[profile.job_title, profile.job_company].filter(Boolean).join(' at ')}</Text>
+              </View>
+            ) : null}
+            {(profile.education_school || profile.education_level) ? (
+              <View style={s.infoRow}>
+                <Ionicons name="school-outline" size={15} color="#9AA0B2" />
+                <Text style={s.infoText}>{[profile.education_school, profile.education_level].filter(Boolean).join(' · ')}</Text>
+              </View>
+            ) : null}
+
+            {/* Prompts */}
+            {Array.isArray(profile.prompts) && profile.prompts.map((pr, i) => (
+              <View key={i} style={s.promptCard}>
+                <Text style={s.promptQ}>{pr.q}</Text>
+                <Text style={s.promptA}>{pr.a}</Text>
+              </View>
+            ))}
+
+            {/* Like comment */}
             {like.comment ? (
               <View style={s.commentBox}>
                 <Text style={s.commentLabel}>Said when they liked you</Text>
@@ -224,7 +258,7 @@ export default function Likes() {
         const [{ data: likesData }, { data: me }] = await Promise.all([
           supabase
             .from('likes')
-            .select('id, from_user_id, comment, created_at, profiles!from_user_id(id, name, birthday, gender, photos, preferred_areas)')
+            .select('id, from_user_id, comment, created_at, profiles!from_user_id(id, name, birthday, gender, photos, preferred_areas, budget, prompts, job_title, job_company, education_school, education_level)')
             .eq('to_user_id', uid)
             .order('created_at', { ascending: false }),
           supabase
@@ -373,7 +407,15 @@ const s = StyleSheet.create({
   overlayPhoto: { width: '100%', height: 320, borderRadius: 18, marginBottom: 16 },
   overlayName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 24, color: colors.ink, marginBottom: 6 },
   overlayMeta: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#5A6072', marginBottom: 4 },
-  commentBox: { marginTop: 16, backgroundColor: '#F8F9FF', borderRadius: 14, padding: 16, borderLeftWidth: 3, borderLeftColor: colors.blue },
+  commentBox: { marginTop: 8, backgroundColor: '#F8F9FF', borderRadius: 14, padding: 16, borderLeftWidth: 3, borderLeftColor: colors.blue },
   commentLabel: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 11, color: '#9AA0B2', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
   commentText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: colors.ink, lineHeight: 22 },
+
+  chip: { backgroundColor: '#F2F3F7', borderRadius: 50, paddingHorizontal: 12, paddingVertical: 6 },
+  chipText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: colors.ink },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#5A6072' },
+  promptCard: { backgroundColor: '#F8F9FF', borderRadius: 14, padding: 14 },
+  promptQ: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 12, color: '#9AA0B2', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  promptA: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: colors.ink, lineHeight: 22 },
 });
