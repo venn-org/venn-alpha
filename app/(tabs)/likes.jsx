@@ -68,13 +68,9 @@ function LikeCard({ like, onPress }) {
             <Ionicons name="person" size={32} color={colors.mist} />
           </View>
         )}
-        <View style={s.likeBlur} />
-        <View style={s.likeLockWrap}>
-          <Ionicons name="lock-closed" size={22} color="#fff" />
-        </View>
       </View>
       <View style={s.likeInfo}>
-        <Text style={s.likeName}>{'? '.repeat(Math.max(1, name.length / 2)).trim()}</Text>
+        <Text style={s.likeName}>{name}</Text>
         <Text style={s.likeTime}>Liked you</Text>
       </View>
     </TouchableOpacity>
