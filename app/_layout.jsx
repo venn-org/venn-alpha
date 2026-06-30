@@ -50,11 +50,12 @@ export default function RootLayout() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
-      setSession(s);
       if (s) {
         const { data: p } = await supabase.from('profiles').select('onboarding_done').eq('id', s.user.id).single();
         setProfileComplete(!!p?.onboarding_done);
+        setSession(s);
       } else {
+        setSession(null);
         setProfileComplete(false);
       }
     });
