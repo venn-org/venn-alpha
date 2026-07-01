@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedIds } from '../../lib/blocks';
 import { getUnreadCount } from '../../lib/notifications';
+import { isOnline } from '../../lib/presence';
 
 const DEMO_NEW = [
   { id: 'n1', name: 'Kavya', photo: null },
@@ -72,11 +73,12 @@ export default function Messages() {
 
         const otherIds = matchRows.map(m => m.user1_id === uid ? m.user2_id : m.user1_id);
         const matchIds = matchRows.map(m => m.id);
-        const [{ data: profileRows }, { data: msgRows }, blockedIds] = await Promise.all([
-          supabase.from('profiles').select('id, name, photos').in('id', otherIds),
+        const [{ data: profileRows }, { data: msgRows }, blockedIds, { data: unreadNotifs }] = await Promise.all([
+          supabase.from('profiles').select('id, name, photos, last_active_at').in('id', otherIds),
           supabase.from('messages').select('match_id, content, sender_id, created_at')
             .in('match_id', matchIds).order('created_at', { ascending: false }),
           getBlockedIds(uid),
+          supabase.from('notifications').select('match_id').eq('user_id', uid).eq('type', 'message').eq('read', false),
         ]);
         const profileMap = {};
         profileRows?.forEach(p => { profileMap[p.id] = p; });
@@ -84,12 +86,19 @@ export default function Messages() {
         const latestMsg = {};
         msgRows?.forEach(msg => { if (!latestMsg[msg.match_id]) latestMsg[msg.match_id] = msg; });
 
+        const unreadMatchIds = new Set((unreadNotifs ?? []).map(n => n.match_id));
+
         const newM = [], yourT = [], theirT = [];
         matchRows.forEach(match => {
           const otherId = match.user1_id === uid ? match.user2_id : match.user1_id;
           if (blockedIds.has(otherId)) return;
           const p = profileMap[otherId];
-          const entry = { id: match.id, name: p?.name ?? '?', photo: Array.isArray(p?.photos) ? p.photos[0] ?? null : null, online: false };
+          const entry = {
+            id: match.id, name: p?.name ?? '?',
+            photo: Array.isArray(p?.photos) ? p.photos[0] ?? null : null,
+            online: isOnline(p?.last_active_at),
+            hasNewMsg: unreadMatchIds.has(match.id),
+          };
 
           const last = latestMsg[match.id];
           if (!last) {
@@ -165,8 +174,11 @@ export default function Messages() {
                   <TouchableOpacity key={m.id} style={s.chatRow} onPress={() => openChat(m)} activeOpacity={0.8}>
                     <Avatar photo={m.photo} name={m.name} online={m.online} />
                     <View style={s.chatInfo}>
-                      <Text style={s.chatName}>{m.name}</Text>
-                      <Text style={s.chatMsg} numberOfLines={1}>{m.lastMsg}</Text>
+                      <View style={s.chatNameRow}>
+                        {m.hasNewMsg && <View style={s.newMsgDot} />}
+                        <Text style={s.chatName}>{m.name}</Text>
+                      </View>
+                      <Text style={[s.chatMsg, m.hasNewMsg && s.chatMsgUnread]} numberOfLines={1}>{m.lastMsg}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="#C0C5D0" />
                   </TouchableOpacity>
@@ -181,10 +193,13 @@ export default function Messages() {
                 </View>
                 {theirTurn.map(m => (
                   <TouchableOpacity key={m.id} style={s.chatRow} onPress={() => openChat(m)} activeOpacity={0.8}>
-                    <Avatar photo={m.photo} name={m.name} />
+                    <Avatar photo={m.photo} name={m.name} online={m.online} />
                     <View style={s.chatInfo}>
-                      <Text style={s.chatName}>{m.name}</Text>
-                      <Text style={[s.chatMsg, { color: '#9AA0B2' }]} numberOfLines={1}>{m.lastMsg}</Text>
+                      <View style={s.chatNameRow}>
+                        {m.hasNewMsg && <View style={s.newMsgDot} />}
+                        <Text style={s.chatName}>{m.name}</Text>
+                      </View>
+                      <Text style={[s.chatMsg, { color: '#9AA0B2' }, m.hasNewMsg && s.chatMsgUnread]} numberOfLines={1}>{m.lastMsg}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="#C0C5D0" />
                   </TouchableOpacity>
@@ -226,6 +241,9 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
   chatInfo: { flex: 1, minWidth: 0 },
-  chatName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 15, color: colors.ink, marginBottom: 3 },
+  chatNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+  chatName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 15, color: colors.ink },
   chatMsg: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: colors.ink },
+  chatMsgUnread: { color: colors.ink, fontFamily: 'HankenGrotesk_700Bold' },
+  newMsgDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4D6A' },
 });

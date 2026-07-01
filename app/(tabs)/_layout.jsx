@@ -1,11 +1,66 @@
+import { useEffect, useState, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../lib/theme';
+import { supabase } from '../../lib/supabase';
+
+function TabIcon({ name, size, color, showDot }) {
+  return (
+    <View>
+      <Ionicons name={name} size={size} color={color} />
+      {showDot && <View style={dotStyles.dot} />}
+    </View>
+  );
+}
+
+const dotStyles = StyleSheet.create({
+  dot: {
+    position: 'absolute', top: -1, right: -3,
+    width: 9, height: 9, borderRadius: 4.5,
+    backgroundColor: '#FF4D6A', borderWidth: 1.5, borderColor: '#fff',
+  },
+});
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const [unreadLikes, setUnreadLikes] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const uidRef = useRef(null);
+
+  useEffect(() => {
+    let channel;
+
+    async function refresh() {
+      const uid = uidRef.current;
+      if (!uid) return;
+      const { data } = await supabase
+        .from('notifications')
+        .select('type')
+        .eq('user_id', uid)
+        .eq('read', false);
+      const rows = data ?? [];
+      setUnreadLikes(rows.filter(r => r.type === 'like').length);
+      setUnreadMessages(rows.filter(r => r.type === 'match' || r.type === 'message').length);
+    }
+
+    async function init() {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) return;
+      uidRef.current = uid;
+      await refresh();
+
+      channel = supabase
+        .channel(`tab-notifs-${uid}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, refresh)
+        .subscribe();
+    }
+    init();
+
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <Tabs
@@ -68,10 +123,11 @@ export default function TabsLayout() {
         options={{
           title: 'Likes',
           tabBarIcon: ({ focused }) => (
-            <Ionicons
+            <TabIcon
               name={focused ? 'heart' : 'heart-outline'}
               size={22}
               color={focused ? colors.blue : '#14161B'}
+              showDot={unreadLikes > 0}
             />
           ),
         }}
@@ -81,10 +137,11 @@ export default function TabsLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ focused }) => (
-            <Ionicons
+            <TabIcon
               name={focused ? 'chatbubble' : 'chatbubble-outline'}
               size={22}
               color={focused ? colors.blue : '#14161B'}
+              showDot={unreadMessages > 0}
             />
           ),
         }}

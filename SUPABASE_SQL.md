@@ -319,12 +319,45 @@ Call it from the client with `supabase.rpc('get_blocked_pair_ids')`.
 
 ---
 
-## 11. Realtime (optional – for live chat)
+## 11. Realtime (for live chat, notifications, unread dots)
 
-Enable realtime on the messages table in Supabase Dashboard:
-**Database → Replication → Tables → enable `messages`**
+Enable realtime on these tables in Supabase Dashboard:
+**Database → Replication → Tables → enable `messages` and `notifications`**
 
 Or via SQL:
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+```
+
+---
+
+## 12. Presence (last active) + read receipts
+
+```sql
+-- Last-active timestamp, used to show "Active now" / "Active Xm ago"
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS last_active_at timestamptz;
+
+-- Read receipts on messages
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS read boolean NOT NULL DEFAULT false;
+
+-- Either participant in a match can update messages in it — needed so the
+-- recipient (not just the sender) can flip `read` to true
+DROP POLICY IF EXISTS "messages_update_read" ON messages;
+CREATE POLICY "messages_update_read" ON messages
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM matches
+      WHERE id = messages.match_id
+        AND (user1_id = auth.uid() OR user2_id = auth.uid())
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM matches
+      WHERE id = messages.match_id
+        AND (user1_id = auth.uid() OR user2_id = auth.uid())
+    )
+  );
 ```

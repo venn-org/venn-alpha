@@ -8,12 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { activeStatusText } from '../../lib/presence';
 
 const DEMO_MESSAGES = [
   { id: '1', content: "Hey! Saw your profile — really liked your vibe 😊", mine: false, time: '10:32 AM' },
-  { id: '2', content: "Haha thanks! Your place in Bandra looks amazing btw", mine: true, time: '10:34 AM' },
+  { id: '2', content: "Haha thanks! Your place in Bandra looks amazing btw", mine: true, time: '10:34 AM', read: true },
   { id: '3', content: "I have a 2BHK in Bandra West, looking for a flatmate 🙂", mine: false, time: '10:35 AM' },
-  { id: '4', content: "That sounds perfect! What's the rent split?", mine: true, time: '10:36 AM' },
+  { id: '4', content: "That sounds perfect! What's the rent split?", mine: true, time: '10:36 AM', read: false },
   { id: '5', content: "Around ₹18k each. Flat has a great balcony and the society is super chill", mine: false, time: '10:38 AM' },
 ];
 
@@ -24,9 +25,11 @@ export default function Chat() {
   const [messages, setMessages] = useState(matchId ? [] : DEMO_MESSAGES);
   const [loadingMsgs, setLoadingMsgs] = useState(!!matchId);
   const [text, setText] = useState(prefill ?? '');
+  const [otherStatus, setOtherStatus] = useState(null);
   const scrollRef = useRef(null);
   const displayName = name ?? 'Chat';
   const sendScale = useRef(new Animated.Value(1)).current;
+  const otherLastActiveRef = useRef(null);
 
   function animateSend() {
     Animated.sequence([
@@ -38,21 +41,44 @@ export default function Chat() {
   useEffect(() => {
     if (!matchId) return;
     let uid = null;
+    let otherId = null;
+
+    async function markRead(myUid, otherUid) {
+      await Promise.all([
+        supabase.from('messages').update({ read: true })
+          .eq('match_id', matchId).eq('sender_id', otherUid).eq('read', false),
+        supabase.from('notifications').update({ read: true })
+          .eq('user_id', myUid).eq('match_id', matchId).in('type', ['message', 'match']).eq('read', false),
+      ]);
+    }
 
     async function load() {
       try {
         const { data: authData } = await supabase.auth.getUser();
         uid = authData?.user?.id;
+
+        const { data: matchRow } = await supabase
+          .from('matches').select('user1_id, user2_id').eq('id', matchId).single();
+        if (matchRow) {
+          otherId = matchRow.user1_id === uid ? matchRow.user2_id : matchRow.user1_id;
+          const { data: otherProfile } = await supabase
+            .from('profiles').select('last_active_at').eq('id', otherId).single();
+          otherLastActiveRef.current = otherProfile?.last_active_at ?? null;
+          setOtherStatus(activeStatusText(otherLastActiveRef.current));
+        }
+
         const { data, error } = await supabase
           .from('messages')
-          .select('id, content, sender_id, created_at')
+          .select('id, content, sender_id, created_at, read')
           .eq('match_id', matchId)
           .order('created_at', { ascending: true });
         if (error) throw error;
         setMessages((data ?? []).map(m => ({
-          id: m.id, content: m.content, mine: m.sender_id === uid,
+          id: m.id, content: m.content, mine: m.sender_id === uid, read: m.read,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         })));
+
+        if (uid && otherId) await markRead(uid, otherId);
       } catch (e) {
         Alert.alert('Could not load messages', e.message);
       } finally {
@@ -62,6 +88,10 @@ export default function Chat() {
 
     load();
 
+    const statusInterval = setInterval(() => {
+      if (otherLastActiveRef.current) setOtherStatus(activeStatusText(otherLastActiveRef.current));
+    }, 30000);
+
     const channel = supabase
       .channel(`match-${matchId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
@@ -69,14 +99,22 @@ export default function Chat() {
           const msg = payload.new;
           if (msg.sender_id === uid) return; // already added optimistically
           setMessages(prev => [...prev, {
-            id: msg.id, content: msg.content, mine: false,
+            id: msg.id, content: msg.content, mine: false, read: msg.read,
             time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }]);
           setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+          // Chat is open and visible — mark this incoming message read right away.
+          if (uid && otherId) markRead(uid, otherId);
+        })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const msg = payload.new;
+          if (msg.sender_id !== uid) return; // only care about read-receipts on my own messages
+          setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: msg.read } : m));
         })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(channel); clearInterval(statusInterval); };
   }, [matchId]);
 
   async function send() {
@@ -84,7 +122,7 @@ export default function Chat() {
     if (!trimmed) return;
     animateSend();
     const localId = Date.now().toString();
-    const msg = { id: localId, content: trimmed, mine: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    const msg = { id: localId, content: trimmed, mine: true, read: false, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setMessages(prev => [...prev, msg]);
     setText('');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -93,8 +131,11 @@ export default function Chat() {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) throw new Error('Not signed in');
-      const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: uid, content: trimmed });
+      const { data: inserted, error } = await supabase.from('messages')
+        .insert({ match_id: matchId, sender_id: uid, content: trimmed })
+        .select('id').single();
       if (error) throw error;
+      if (inserted) setMessages(prev => prev.map(m => m.id === localId ? { ...m, id: inserted.id } : m));
     } catch (e) {
       setMessages(prev => prev.filter(m => m.id !== localId));
       setText(trimmed);
@@ -118,7 +159,9 @@ export default function Chat() {
             </View>
             <View>
               <Text style={s.headerName}>{displayName}</Text>
-              <Text style={s.headerStatus}>Active now</Text>
+              <Text style={[s.headerStatus, otherStatus && !otherStatus.startsWith('Active now') && s.headerStatusOffline]}>
+                {otherStatus ?? 'Active now'}
+              </Text>
             </View>
           </View>
           <TouchableOpacity style={s.moreBtn} activeOpacity={0.7}>
@@ -151,7 +194,16 @@ export default function Chat() {
                 <View style={[s.bubble, msg.mine ? s.bubbleMine : s.bubbleThem]}>
                   <Text style={[s.bubbleText, msg.mine && s.bubbleTextMine]}>{msg.content}</Text>
                 </View>
-                <Text style={[s.msgTime, msg.mine && { textAlign: 'right' }]}>{msg.time}</Text>
+                <View style={[s.msgMeta, msg.mine && { justifyContent: 'flex-end' }]}>
+                  <Text style={s.msgTime}>{msg.time}</Text>
+                  {msg.mine && (
+                    <Ionicons
+                      name={msg.read ? 'checkmark-done' : 'checkmark'}
+                      size={14}
+                      color={msg.read ? colors.blue : '#9AA0B2'}
+                    />
+                  )}
+                </View>
               </View>
             </View>
           ))}
@@ -193,6 +245,7 @@ const s = StyleSheet.create({
   headerAvatarInitial: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 15, color: colors.slate },
   headerName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 16, color: colors.ink },
   headerStatus: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#22C55E' },
+  headerStatusOffline: { color: '#9AA0B2' },
   moreBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
   messages: { flex: 1 },
@@ -209,7 +262,8 @@ const s = StyleSheet.create({
   bubbleMine: { backgroundColor: colors.blue, borderBottomRightRadius: 4 },
   bubbleText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: colors.ink, lineHeight: 21 },
   bubbleTextMine: { color: '#fff' },
-  msgTime: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 10, color: '#9AA0B2', marginTop: 3, paddingHorizontal: 4 },
+  msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 4 },
+  msgTime: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 10, color: '#9AA0B2' },
 
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F0F1F5' },
   input: { flex: 1, backgroundColor: colors.canvas, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: colors.ink, maxHeight: 100 },

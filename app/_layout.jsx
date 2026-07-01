@@ -104,6 +104,20 @@ export default function RootLayout() {
     return () => { supabase.removeChannel(channel); };
   }, [session]);
 
+  // Heartbeat: keep profiles.last_active_at fresh while the app is open,
+  // so other users can see an accurate "Active now" / "Active Xm ago" status.
+  useEffect(() => {
+    if (!session) return;
+    const uid = session.user.id;
+
+    async function ping() {
+      await supabase.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', uid);
+    }
+    ping();
+    const interval = setInterval(ping, 60000);
+    return () => clearInterval(interval);
+  }, [session]);
+
   useEffect(() => {
     if (!ready) return;
     const inAuth = segments[0] === '(auth)';
