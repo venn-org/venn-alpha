@@ -14,6 +14,8 @@ import { blockUser } from '../../lib/blocks';
 import { unmatchUser } from '../../lib/matches';
 import ReportSheet from '../../components/ReportSheet';
 
+const PAGE_SIZE = 30;
+
 const DEMO_MESSAGES = [
   { id: '1', content: "Hey! Saw your profile — really liked your vibe 😊", mine: false, time: '10:32 AM' },
   { id: '2', content: "Haha thanks! Your place in Bandra looks amazing btw", mine: true, time: '10:34 AM', read: true },
@@ -28,8 +30,11 @@ export default function Chat() {
   const { name, matchId, photo, prefill } = useLocalSearchParams();
   const [messages, setMessages] = useState(matchId ? [] : DEMO_MESSAGES);
   const [loadingMsgs, setLoadingMsgs] = useState(!!matchId);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [text, setText] = useState(prefill ?? '');
   const [otherStatus, setOtherStatus] = useState(null);
+  const [otherTyping, setOtherTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const scrollRef = useRef(null);
@@ -38,6 +43,14 @@ export default function Chat() {
   const otherLastActiveRef = useRef(null);
   const otherIdRef = useRef(null);
   const uidRef = useRef(null);
+  const oldestCursorRef = useRef(null);
+  const contentHeightRef = useRef(0);
+  const scrollYRef = useRef(0);
+  const pendingPrependRef = useRef(false);
+  const channelRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
+  const stopTypingTimeoutRef = useRef(null);
+  const otherTypingTimeoutRef = useRef(null);
 
   function animateSend() {
     Animated.sequence([
@@ -81,9 +94,13 @@ export default function Chat() {
           .from('messages')
           .select('id, content, sender_id, created_at, read')
           .eq('match_id', matchId)
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE);
         if (error) throw error;
-        setMessages((data ?? []).map(m => ({
+        const rows = (data ?? []).slice().reverse();
+        oldestCursorRef.current = rows[0]?.created_at ?? null;
+        setHasMore((data ?? []).length === PAGE_SIZE);
+        setMessages(rows.map(m => ({
           id: m.id, content: m.content, mine: m.sender_id === uid, read: m.read,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         })));
@@ -122,10 +139,70 @@ export default function Chat() {
           if (msg.sender_id !== uid) return; // only care about read-receipts on my own messages
           setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: msg.read } : m));
         })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (!payload || payload.userId === uid) return;
+        clearTimeout(otherTypingTimeoutRef.current);
+        setOtherTyping(!!payload.typing);
+        if (payload.typing) {
+          otherTypingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 4000);
+        }
+      })
       .subscribe();
+    channelRef.current = channel;
 
-    return () => { supabase.removeChannel(channel); clearInterval(statusInterval); };
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+      clearInterval(statusInterval);
+      clearTimeout(otherTypingTimeoutRef.current);
+      clearTimeout(stopTypingTimeoutRef.current);
+    };
   }, [matchId]);
+
+  async function loadMore() {
+    if (!matchId || !hasMore || loadingMore || !oldestCursorRef.current) return;
+    setLoadingMore(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, content, sender_id, created_at, read')
+        .eq('match_id', matchId)
+        .lt('created_at', oldestCursorRef.current)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+      if (error) throw error;
+      const rows = (data ?? []).slice().reverse();
+      setHasMore((data ?? []).length === PAGE_SIZE);
+      if (rows.length > 0) {
+        oldestCursorRef.current = rows[0].created_at;
+        const uid = uidRef.current;
+        pendingPrependRef.current = true;
+        setMessages(prev => [
+          ...rows.map(m => ({
+            id: m.id, content: m.content, mine: m.sender_id === uid, read: m.read,
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })),
+          ...prev,
+        ]);
+      }
+    } catch (e) {
+      Alert.alert('Could not load earlier messages', e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function handleContentSizeChange(w, h) {
+    if (pendingPrependRef.current) {
+      const delta = h - contentHeightRef.current;
+      contentHeightRef.current = h;
+      pendingPrependRef.current = false;
+      scrollRef.current?.scrollTo({ y: scrollYRef.current + delta, animated: false });
+    } else {
+      contentHeightRef.current = h;
+      scrollRef.current?.scrollToEnd({ animated: false });
+    }
+  }
 
   function confirmUnmatch() {
     Alert.alert(
@@ -165,6 +242,22 @@ export default function Chat() {
     router.back();
   }
 
+  function handleTextChange(v) {
+    setText(v);
+    const uid = uidRef.current;
+    if (!matchId || !uid) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > 1500) {
+      lastTypingSentRef.current = now;
+      channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { userId: uid, typing: true } });
+    }
+    clearTimeout(stopTypingTimeoutRef.current);
+    stopTypingTimeoutRef.current = setTimeout(() => {
+      lastTypingSentRef.current = 0;
+      channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { userId: uid, typing: false } });
+    }, 2000);
+  }
+
   async function send() {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -173,6 +266,10 @@ export default function Chat() {
     const msg = { id: localId, content: trimmed, mine: true, read: false, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setMessages(prev => [...prev, msg]);
     setText('');
+    clearTimeout(stopTypingTimeoutRef.current);
+    lastTypingSentRef.current = 0;
+    const typingUid = uidRef.current;
+    if (typingUid) channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { userId: typingUid, typing: false } });
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     if (!matchId) return;
     try {
@@ -207,11 +304,13 @@ export default function Chat() {
             </View>
             <View>
               <Text style={s.headerName}>{displayName}</Text>
-              {otherStatus && (
+              {otherTyping ? (
+                <Text style={[s.headerStatus, s.headerStatusTyping]}>Typing…</Text>
+              ) : otherStatus ? (
                 <Text style={[s.headerStatus, !otherStatus.startsWith('Active now') && s.headerStatusOffline]}>
                   {otherStatus}
                 </Text>
-              )}
+              ) : null}
             </View>
           </View>
           <TouchableOpacity style={s.moreBtn} activeOpacity={0.7} onPress={() => setMenuOpen(true)}>
@@ -252,9 +351,16 @@ export default function Chat() {
           ref={scrollRef}
           style={s.messages}
           contentContainerStyle={s.messagesContent}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={handleContentSizeChange}
+          onScroll={e => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
+          {!loadingMsgs && hasMore && (
+            <TouchableOpacity onPress={loadMore} disabled={loadingMore} style={s.loadMoreBtn} activeOpacity={0.7}>
+              <Text style={s.loadMoreText}>{loadingMore ? 'Loading…' : 'Load earlier messages'}</Text>
+            </TouchableOpacity>
+          )}
           {loadingMsgs ? (
             <Text style={s.emptyText}>Loading…</Text>
           ) : messages.length === 0 ? (
@@ -292,7 +398,7 @@ export default function Chat() {
           <TextInput
             style={s.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={handleTextChange}
             placeholder="Message..."
             placeholderTextColor="#9AA0B2"
             multiline
@@ -325,6 +431,7 @@ const s = StyleSheet.create({
   headerName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 16, color: colors.ink },
   headerStatus: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#22C55E' },
   headerStatusOffline: { color: '#9AA0B2' },
+  headerStatusTyping: { color: colors.blue, fontFamily: 'HankenGrotesk_600SemiBold' },
   moreBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
   menuBackdrop: {
@@ -344,6 +451,8 @@ const s = StyleSheet.create({
   messages: { flex: 1 },
   messagesContent: { padding: 16, gap: 12, paddingBottom: 8 },
   emptyText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#9AA0B2', textAlign: 'center', marginTop: 40 },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 4 },
+  loadMoreText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: colors.blue },
 
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   msgRowMine: { flexDirection: 'row-reverse' },
