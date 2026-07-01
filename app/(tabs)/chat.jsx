@@ -45,6 +45,7 @@ export default function Chat() {
   const uidRef = useRef(null);
   const oldestCursorRef = useRef(null);
   const contentHeightRef = useRef(0);
+  const viewportHeightRef = useRef(0);
   const scrollYRef = useRef(0);
   const pendingPrependRef = useRef(false);
   const channelRef = useRef(null);
@@ -104,6 +105,7 @@ export default function Chat() {
           id: m.id, content: m.content, mine: m.sender_id === uid, read: m.read,
           time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         })));
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 0);
 
         if (uid && otherId) await markRead(uid, otherId);
       } catch (e) {
@@ -125,11 +127,15 @@ export default function Chat() {
         (payload) => {
           const msg = payload.new;
           if (msg.sender_id === uid) return; // already added optimistically
+          // Only auto-scroll if the user was already near the bottom — otherwise
+          // a message arriving while they're reading older (paginated-in) history
+          // shouldn't yank them back down.
+          const nearBottom = contentHeightRef.current - (scrollYRef.current + viewportHeightRef.current) < 100;
           setMessages(prev => [...prev, {
             id: msg.id, content: msg.content, mine: false, read: msg.read,
             time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }]);
-          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+          if (nearBottom) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
           // Chat is open and visible — mark this incoming message read right away.
           if (uid && otherId) markRead(uid, otherId);
         })
@@ -195,13 +201,10 @@ export default function Chat() {
   function handleContentSizeChange(w, h) {
     if (pendingPrependRef.current) {
       const delta = h - contentHeightRef.current;
-      contentHeightRef.current = h;
       pendingPrependRef.current = false;
       scrollRef.current?.scrollTo({ y: scrollYRef.current + delta, animated: false });
-    } else {
-      contentHeightRef.current = h;
-      scrollRef.current?.scrollToEnd({ animated: false });
     }
+    contentHeightRef.current = h;
   }
 
   function confirmUnmatch() {
@@ -223,6 +226,10 @@ export default function Chat() {
   }
 
   function confirmBlock() {
+    if (!uidRef.current || !otherIdRef.current) {
+      Alert.alert('Please wait', "Still loading this conversation — try again in a moment.");
+      return;
+    }
     Alert.alert(
       `Block ${displayName}?`,
       "You won't see each other on Venn anymore, and this chat will be removed.",
@@ -331,7 +338,18 @@ export default function Chat() {
                 <Text style={s.menuItemText}>Block</Text>
               </TouchableOpacity>
               <View style={s.menuDivider} />
-              <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); setReportVisible(true); }}>
+              <TouchableOpacity
+                style={s.menuItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMenuOpen(false);
+                  if (!otherIdRef.current) {
+                    Alert.alert('Please wait', "Still loading this conversation — try again in a moment.");
+                    return;
+                  }
+                  setReportVisible(true);
+                }}
+              >
                 <Ionicons name="flag-outline" size={16} color="#FF4D6A" />
                 <Text style={[s.menuItemText, { color: '#FF4D6A' }]}>Report</Text>
               </TouchableOpacity>
@@ -353,6 +371,7 @@ export default function Chat() {
           contentContainerStyle={s.messagesContent}
           onContentSizeChange={handleContentSizeChange}
           onScroll={e => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+          onLayout={e => { viewportHeightRef.current = e.nativeEvent.layout.height; }}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >

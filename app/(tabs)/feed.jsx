@@ -624,23 +624,31 @@ export default function Feed() {
   function back() { if (canBack) setIdx(i => i - 1); }
 
   function handleSkip() {
-    if (profile && !profile._demo) {
-      skippedRef.current = [...skippedRef.current, profile];
+    const wasLast = !canNext;
+    const justSkipped = profile && !profile._demo ? profile : null;
+
+    if (wasLast) {
+      // Recycle everything skipped so far, but keep the card just skipped out
+      // of that batch so it doesn't reappear as the very next card.
+      const toRecycle = skippedRef.current;
+      skippedRef.current = justSkipped ? [justSkipped] : [];
+      if (toRecycle.length > 0) {
+        setProfiles(prev => [...prev, ...shuffle(toRecycle)]);
+      }
+    } else if (justSkipped) {
+      skippedRef.current = [...skippedRef.current, justSkipped];
     }
-    if (!canNext && skippedRef.current.length > 0) {
-      // Recycle skipped profiles back into the feed
-      const recycled = shuffle(skippedRef.current);
-      skippedRef.current = [];
-      setProfiles(prev => [...prev, ...recycled]);
-    }
+
     setIdx(i => i + 1);
   }
 
   async function handleBlock(p) {
     // Remove immediately so it can't be re-swiped to; don't wait on the network call.
-    setProfiles(prev => prev.filter(x => x.id !== p.id));
+    const filtered = profiles.filter(x => x.id !== p.id);
+    setProfiles(filtered);
+    setIdx(i => Math.min(i, Math.max(0, filtered.length - 1)));
     skippedRef.current = skippedRef.current.filter(x => x.id !== p.id);
-    if (!p?.id || String(p.id).startsWith('d')) return;
+    if (!p?.id || p._demo) return;
     const uid = uidRef.current;
     if (!uid) return;
     await blockUser(uid, p.id);
@@ -654,8 +662,11 @@ export default function Feed() {
   async function sendLike() {
     const p = likeSheet;
     setLikeSheet(null);
-    next();
-    if (!p?.id || String(p.id).startsWith('d')) return;
+    // Always advance past the liked profile, even at the end of the deck
+    // (mirrors handleSkip) — next() no-ops there and leaves the card stuck
+    // on screen, open to a duplicate like.
+    setIdx(i => i + 1);
+    if (!p?.id || p._demo) return;
     setLikeSending(true);
     try {
       const uid = uidRef.current;

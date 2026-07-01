@@ -85,12 +85,22 @@ function getPromptCategory(q) {
 
 function calcAge(birthday) {
   if (!birthday) return null;
-  return Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 3600 * 1000));
+  const b = new Date(birthday);
+  if (isNaN(b.getTime())) return null;
+  const today = new Date();
+  let age = today.getUTCFullYear() - b.getUTCFullYear();
+  const monthDiff = today.getUTCMonth() - b.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < b.getUTCDate())) {
+    age--;
+  }
+  return age;
 }
 
 function formatBirthday(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 function calcCompletion(profile) {
@@ -226,9 +236,12 @@ function BasicInfoSheet({ visible, profile, onSave, onClose }) {
   function validateBirthday() {
     if (!day && !month && !year) return true; // unchanged / not set
     const d = parseInt(day), m = parseInt(month), y = parseInt(year);
-    const maxYear = new Date().getFullYear() - 18;
-    if (!d || !m || !y || y < 1900 || y > maxYear) { setError('You must be at least 18 years old.'); return false; }
+    if (!d || !m || !y || y < 1900) { setError('Please enter a valid birthday.'); return false; }
     if (d < 1 || d > 31 || m < 1 || m > 12) { setError('Please enter a valid birthday.'); return false; }
+    const today = new Date();
+    const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+    const birthDate = new Date(y, m - 1, d);
+    if (birthDate > eighteenYearsAgo) { setError('You must be at least 18 years old.'); return false; }
     return true;
   }
 
@@ -1099,6 +1112,7 @@ export default function Profile() {
   }, []);
 
   async function pickPhoto(index) {
+    if (uploading) return; // avoid concurrent picks racing on the same profile.photos snapshot
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!granted) { Alert.alert('Permission needed', 'Please allow photo access in Settings.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });

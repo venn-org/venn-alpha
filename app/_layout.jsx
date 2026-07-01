@@ -53,9 +53,13 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       if (s) {
+        // Set session immediately, before awaiting the profile check — otherwise
+        // a screen that navigates right after its own successful auth call (e.g.
+        // the OTP screens) can change `segments` while `session` here is still
+        // null, and the redirect effect below bounces the user back to /login.
+        setSession(s);
         const { data: p } = await supabase.from('profiles').select('onboarding_done').eq('id', s.user.id).single();
         setProfileComplete(!!p?.onboarding_done);
-        setSession(s);
       } else {
         setSession(null);
         setProfileComplete(false);

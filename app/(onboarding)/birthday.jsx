@@ -14,9 +14,12 @@ export default function Birthday() {
 
   function validate() {
     const d = parseInt(day), m = parseInt(month), y = parseInt(year);
-    const maxYear = new Date().getFullYear() - 18;
-    if (!d || !m || !y || y < 1900 || y > maxYear) { setError('You must be at least 18 years old.'); return false; }
+    if (!d || !m || !y || y < 1900) { setError('Please enter a valid date.'); return false; }
     if (d < 1 || d > 31 || m < 1 || m > 12) { setError('Please enter a valid date.'); return false; }
+    const today = new Date();
+    const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+    const birthDate = new Date(y, m - 1, d);
+    if (birthDate > eighteenYearsAgo) { setError('You must be at least 18 years old.'); return false; }
     setError('');
     return true;
   }

@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
-import { getNotifications, markAllRead } from '../../lib/notifications';
+import { getNotifications, markAllRead, markRead } from '../../lib/notifications';
 
 const NOTIF_META = {
   match:   { icon: 'heart',              bg: '#FFF0F3', color: '#FF4D6A' },
@@ -94,8 +94,13 @@ export default function Notifications() {
     if (uid) await markAllRead(uid);
   }
 
-  function handlePress(n) {
+  async function handlePress(n) {
     setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+    if (!n.read) {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (uid) markRead(uid, n.id);
+    }
     if ((n.type === 'match' || n.type === 'message') && n.matchId) {
       router.push({ pathname: '/(tabs)/chat', params: { name: n.actorName, photo: n.actorPhoto ?? '', matchId: n.matchId } });
     } else if (n.type === 'like') {
