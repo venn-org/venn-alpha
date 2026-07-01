@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity,
   PanResponder, Animated, Modal, TextInput,
-  ScrollView, Pressable, Dimensions,
+  ScrollView, Pressable, Dimensions, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { getBlockedIds, blockUser } from '../../lib/blocks';
+import ReportSheet from '../../components/ReportSheet';
 
 const SW = Dimensions.get('window').width;
 
@@ -116,6 +118,8 @@ export default function Standouts() {
   const [keyNote, setKeyNote] = useState('');
   const [keyTarget, setKeyTarget] = useState('');
   const [keyTargetId, setKeyTargetId] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
 
   const pan = useRef(new Animated.ValueXY()).current;
   const nopeOpacity = useRef(new Animated.Value(0)).current;
@@ -173,20 +177,23 @@ export default function Standouts() {
     async function loadOwners() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, name, birthday, gender, preferred_areas, budget, flat_type, photos')
-          .neq('id', user.id)
-          .eq('onboarding_done', true)
-          .eq('user_type', 'owner')
-          .limit(20);
+        const [{ data }, blockedIds] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, name, birthday, gender, verified, preferred_areas, budget, flat_type, photos')
+            .neq('id', user.id)
+            .eq('onboarding_done', true)
+            .eq('user_type', 'owner')
+            .limit(20),
+          getBlockedIds(user.id),
+        ]);
         if (data && data.length > 0) {
-          const mapped = data.map(p => {
+          const mapped = data.filter(p => !blockedIds.has(p.id)).map(p => {
             const age = p.birthday
               ? Math.floor((Date.now() - new Date(p.birthday).getTime()) / (365.25 * 24 * 3600 * 1000))
               : 25;
             return {
-              id: p.id, name: p.name ?? 'Unknown', age, verified: false,
+              id: p.id, name: p.name ?? 'Unknown', age, verified: !!p.verified,
               photo: Array.isArray(p.photos) ? p.photos[0] : null,
               area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] : 'Mumbai',
               rent: p.budget ?? '₹15k / mo',
@@ -250,6 +257,15 @@ export default function Standouts() {
     });
   }
 
+  async function handleBlock(target) {
+    setProfiles(prev => prev.filter(p => p.id !== target.id));
+    if (String(target.id).startsWith('s')) return; // demo profile
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) return;
+    await blockUser(uid, target.id);
+  }
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -274,11 +290,37 @@ export default function Standouts() {
     })
   ).current;
 
+  if (profiles.length === 0) {
+    return (
+      <View style={[s.root, { paddingTop: insets.top + 14, alignItems: 'center', justifyContent: 'center', gap: 12 }]}>
+        <Ionicons name="home-outline" size={48} color="rgba(255,255,255,0.25)" />
+        <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: 'rgba(255,255,255,0.6)' }}>No standouts right now</Text>
+      </View>
+    );
+  }
+
   const profile = profiles[displayIdx % profiles.length];
   const dotIdx = displayIdx % profiles.length;
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 14 }]}>
+      {/* Menu (report / block) */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={s.menuBackdrop} onPress={() => setMenuOpen(false)}>
+          <View style={s.menuBox}>
+            <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); handleBlock(profile); }}>
+              <Ionicons name="ban-outline" size={16} color="#14161B" />
+              <Text style={s.menuItemText}>Block</Text>
+            </TouchableOpacity>
+            <View style={s.menuDivider} />
+            <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); setReportTarget(profile); }}>
+              <Ionicons name="flag-outline" size={16} color="#FF4D6A" />
+              <Text style={[s.menuItemText, { color: '#FF4D6A' }]}>Report</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* Top bar */}
       <View style={s.topBar}>
         <View style={{ flex: 1 }}>
@@ -332,6 +374,10 @@ export default function Standouts() {
           <View style={s.rentBadge}>
             <Text style={s.rentText}>{profile.rent}</Text>
           </View>
+          {/* Overflow menu (report / block) */}
+          <TouchableOpacity style={s.cardMenuBtn} onPress={() => setMenuOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="ellipsis-vertical" size={15} color="#fff" />
+          </TouchableOpacity>
 
           {/* Bottom info overlay */}
           <View style={s.cardBottom}>
@@ -410,9 +456,14 @@ export default function Standouts() {
           }]}>
             {/* Sticky top bar */}
             <View style={s.profileTopBar}>
-              <TouchableOpacity style={s.closeCircle} onPress={() => setShowProfile(false)}>
-                <Ionicons name="close" size={16} color="#fff" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity style={s.closeCircle} onPress={() => setShowProfile(false)}>
+                  <Ionicons name="close" size={16} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.closeCircle} onPress={() => setMenuOpen(true)}>
+                  <Ionicons name="ellipsis-vertical" size={14} color="#fff" />
+                </TouchableOpacity>
+              </View>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
                   style={s.profilePassCircle}
@@ -581,6 +632,14 @@ export default function Standouts() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ReportSheet
+        visible={!!reportTarget}
+        targetId={reportTarget?.id}
+        targetName={reportTarget?.name}
+        onClose={() => setReportTarget(null)}
+        onSubmitted={() => Alert.alert('Report submitted', "Thanks — we'll review it.")}
+      />
     </View>
   );
 }
@@ -613,6 +672,26 @@ const s = StyleSheet.create({
   hasFlatText: { fontFamily: 'HankenGrotesk_700Bold', fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.4 },
   rentBadge: { position: 'absolute', top: 14, right: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 50, paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   rentText: { fontFamily: 'HankenGrotesk_700Bold', fontSize: 11, fontWeight: '700', color: '#C4AAFF' },
+  cardMenuBtn: {
+    position: 'absolute', top: 54, right: 14,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  menuBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-start', alignItems: 'flex-end',
+    paddingTop: 120, paddingRight: 20,
+  },
+  menuBox: {
+    backgroundColor: '#fff', borderRadius: 14, minWidth: 160,
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 4 },
+    elevation: 8, overflow: 'hidden',
+  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 16 },
+  menuItemText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#14161B' },
+  menuDivider: { height: 1, backgroundColor: '#F0F1F5' },
 
   // 🔑 button on main card photo (bottom-right, same position as home heart)
   photoKeyBtn: {

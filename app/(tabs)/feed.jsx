@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Image, Modal, Pressable, Dimensions, TextInput, Animated,
+  StyleSheet, Image, Modal, Pressable, Dimensions, TextInput, Animated, Alert,
 } from 'react-native';
 
 const SCREEN_H = Dimensions.get('window').height;
@@ -12,6 +12,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getBlockedIds, blockUser } from '../../lib/blocks';
+import ReportSheet from '../../components/ReportSheet';
 import PreferencesSheet, {
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
   getPrefDisplay, isPrefSet, savePrefsToSupabase,
@@ -240,7 +242,7 @@ function normaliseProfile(p) {
   return {
     id: p.id, name: p.name ?? 'Unknown', overlap: null, age,
     pronouns: Array.isArray(p.pronouns) ? p.pronouns.join('/') : null,
-    verified: false, active: null,
+    verified: !!p.verified, active: null,
     photo: Array.isArray(p.photos) ? p.photos[0] : null,
     photos: Array.isArray(p.photos) ? p.photos : [],
     area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] : null,
@@ -433,7 +435,7 @@ function MatchModal({ visible, myName, myPhoto, theirName, theirPhoto, onMessage
 
 // ─── Profile card ─────────────────────────────────────────────────────────────
 
-function ProfileCard({ profile, onBack, canBack, onSkip, onLike }) {
+function ProfileCard({ profile, onBack, canBack, onSkip, onLike, onBlock, onReport }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const accentPrompt = profile.prompts?.find(p => p.accent);
   const regPrompts = profile.prompts?.filter(p => !p.accent) ?? [];
@@ -454,7 +456,12 @@ function ProfileCard({ profile, onBack, canBack, onSkip, onLike }) {
               <Text style={s.menuItemText}>Remove</Text>
             </TouchableOpacity>
             <View style={s.menuDivider} />
-            <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => setMenuOpen(false)}>
+            <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); onBlock(); }}>
+              <Ionicons name="ban-outline" size={16} color={colors.ink} />
+              <Text style={s.menuItemText}>Block</Text>
+            </TouchableOpacity>
+            <View style={s.menuDivider} />
+            <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); onReport(); }}>
               <Ionicons name="flag-outline" size={16} color="#FF4D6A" />
               <Text style={[s.menuItemText, { color: '#FF4D6A' }]}>Report</Text>
             </TouchableOpacity>
@@ -604,6 +611,7 @@ export default function Feed() {
   const [likeSheet, setLikeSheet] = useState(null);
   const [likeComment, setLikeComment] = useState('');
   const [likeSending, setLikeSending] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
   const uidRef = useRef(null);
   const myInfoRef = useRef({ name: null, photo: null });
   const skippedRef = useRef([]);
@@ -626,6 +634,16 @@ export default function Feed() {
       setProfiles(prev => [...prev, ...recycled]);
     }
     setIdx(i => i + 1);
+  }
+
+  async function handleBlock(p) {
+    // Remove immediately so it can't be re-swiped to; don't wait on the network call.
+    setProfiles(prev => prev.filter(x => x.id !== p.id));
+    skippedRef.current = skippedRef.current.filter(x => x.id !== p.id);
+    if (!p?.id || String(p.id).startsWith('d')) return;
+    const uid = uidRef.current;
+    if (!uid) return;
+    await blockUser(uid, p.id);
   }
 
   function openLikeSheet(p) {
@@ -740,15 +758,18 @@ export default function Feed() {
           if (anySet) setBannerDismissed(true);
         }
 
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, name, birthday, gender, pronouns, preferred_areas, budget, photos, prompts, job_title, job_company, education_school, education_level')
-          .neq('id', uid)
-          .eq('onboarding_done', true)
-          .eq('user_type', 'seeking')
-          .limit(100);
+        const [{ data }, blockedIds] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, name, birthday, gender, pronouns, verified, preferred_areas, budget, photos, prompts, job_title, job_company, education_school, education_level')
+            .neq('id', uid)
+            .eq('onboarding_done', true)
+            .eq('user_type', 'seeking')
+            .limit(100),
+          getBlockedIds(uid),
+        ]);
         if (data && data.length > 0) {
-          const normed = data.map(normaliseProfile);
+          const normed = data.filter(p => !blockedIds.has(p.id)).map(normaliseProfile);
           const scored = normed
             .map(p => ({ ...p, _score: scoreProfile(p, currentPrefs) }))
             .sort((a, b) => b._score - a._score);
@@ -862,6 +883,8 @@ export default function Feed() {
               canBack={canBack}
               onSkip={handleSkip}
               onLike={() => openLikeSheet(profile)}
+              onBlock={() => handleBlock(profile)}
+              onReport={() => setReportTarget(profile)}
             />
           </ScrollView>
 
@@ -942,6 +965,14 @@ export default function Feed() {
           router.push({ pathname: '/(tabs)/chat', params: { name: m.name, matchId: m.matchId } });
         }}
         onClose={() => setMatchModal(null)}
+      />
+
+      <ReportSheet
+        visible={!!reportTarget}
+        targetId={reportTarget?.id}
+        targetName={reportTarget?.name}
+        onClose={() => setReportTarget(null)}
+        onSubmitted={() => Alert.alert('Report submitted', "Thanks — we'll review it.")}
       />
     </View>
   );

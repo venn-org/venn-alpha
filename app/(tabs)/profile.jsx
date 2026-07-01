@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
@@ -64,6 +65,15 @@ const PROMPT_CATEGORIES = {
 
 const EDU_LEVELS = ['Secondary school', 'Bachelor\'s degree', 'Postgraduate degree', 'Prefer not to say'];
 
+const GENDER_OPTIONS = ['Man', 'Woman', 'Non-binary', 'Prefer not to say'];
+const PRONOUN_OPTIONS = ['she', 'her', 'hers', 'he', 'him', 'his', 'they', 'them'];
+const LIFESTYLE_QUESTIONS = [
+  { key: 'drink', label: 'Drinking' },
+  { key: 'tobacco', label: 'Tobacco' },
+  { key: 'weed', label: 'Cannabis' },
+];
+const LIFESTYLE_OPTIONS = ['Yes', 'Sometimes', 'No', 'Prefer not to say'];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getPromptCategory(q) {
@@ -76,6 +86,11 @@ function getPromptCategory(q) {
 function calcAge(birthday) {
   if (!birthday) return null;
   return Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 3600 * 1000));
+}
+
+function formatBirthday(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function calcCompletion(profile) {
@@ -142,6 +157,290 @@ function SettingsRow({ iconBg, icon, iconColor = colors.blue, title, subtitle, s
       </View>
       {right ?? <Ionicons name="chevron-forward" size={16} color="#C0C5D0" />}
     </TouchableOpacity>
+  );
+}
+
+// ─── Basic info bottom sheet (name, birthday, gender, pronouns, lifestyle) ────
+
+function BasicInfoSheet({ visible, profile, onSave, onClose }) {
+  const insets = useSafeAreaInsets();
+  const [name, setName] = useState('');
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+  const [gender, setGender] = useState(null);
+  const [pronouns, setPronouns] = useState([]);
+  const [lifestyle, setLifestyle] = useState({});
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetY = useRef(new Animated.Value(600)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 250, useNativeDriver: false }),
+        Animated.spring(sheetY, { toValue: 0, friction: 10, tension: 60, useNativeDriver: false }),
+      ]).start();
+    } else {
+      backdropOpacity.setValue(0);
+      sheetY.setValue(600);
+    }
+  }, [visible]);
+
+  function animateClose() {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: false }),
+      Animated.timing(sheetY, { toValue: 600, duration: 220, useNativeDriver: false }),
+    ]).start(() => onClose());
+  }
+
+  useEffect(() => {
+    if (visible) {
+      setName(profile?.name ?? '');
+      if (profile?.birthday) {
+        const [y, m, d] = profile.birthday.split('-');
+        setYear(y ?? ''); setMonth(m ?? ''); setDay(d ?? '');
+      } else {
+        setYear(''); setMonth(''); setDay('');
+      }
+      setGender(profile?.gender ?? null);
+      setPronouns(Array.isArray(profile?.pronouns) ? profile.pronouns : []);
+      setLifestyle({
+        drink: profile?.drink ?? null,
+        tobacco: profile?.tobacco ?? null,
+        weed: profile?.weed ?? null,
+      });
+      setError('');
+    }
+  }, [visible]);
+
+  function togglePronoun(opt) {
+    setPronouns(s => s.includes(opt) ? s.filter(x => x !== opt) : s.length < 4 ? [...s, opt] : s);
+  }
+
+  function setLifestyleAnswer(key, val) {
+    setLifestyle(l => ({ ...l, [key]: val }));
+  }
+
+  function validateBirthday() {
+    if (!day && !month && !year) return true; // unchanged / not set
+    const d = parseInt(day), m = parseInt(month), y = parseInt(year);
+    const maxYear = new Date().getFullYear() - 18;
+    if (!d || !m || !y || y < 1900 || y > maxYear) { setError('You must be at least 18 years old.'); return false; }
+    if (d < 1 || d > 31 || m < 1 || m > 12) { setError('Please enter a valid birthday.'); return false; }
+    return true;
+  }
+
+  async function save() {
+    if (!name.trim()) { setError('Name cannot be empty.'); return; }
+    if (!validateBirthday()) return;
+    setError('');
+    setSaving(true);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) return;
+      const updates = {
+        name: name.trim(),
+        gender,
+        pronouns: pronouns.length ? pronouns : null,
+        drink: lifestyle.drink ?? null,
+        tobacco: lifestyle.tobacco ?? null,
+        weed: lifestyle.weed ?? null,
+      };
+      if (day && month && year) {
+        updates.birthday = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+      const { error: err } = await supabase.from('profiles').update(updates).eq('id', uid);
+      if (err) { Alert.alert('Save failed', err.message); return; }
+      onSave(updates);
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={animateClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, justifyContent: 'flex-end' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)', opacity: backdropOpacity }]} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
+        <Animated.View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: SCREEN_H * 0.86, paddingBottom: insets.bottom + 16, transform: [{ translateY: sheetY }] }}>
+          <View style={{ width: 40, height: 4, backgroundColor: '#E6E8EE', borderRadius: 2, alignSelf: 'center', marginTop: 16, marginBottom: 20 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 4 }}>
+            <Text style={{ fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18, color: '#14161B' }}>Basic Info</Text>
+            <TouchableOpacity onPress={animateClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F3F7', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={14} color="#14161B" />
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 13, color: '#9AA0B2', paddingHorizontal: 20, marginBottom: 16 }}>Shown on your profile card.</Text>
+
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <View style={{ paddingHorizontal: 20 }}>
+              <Text style={bi.label}>NAME</Text>
+              <TextInput style={bi.input} placeholder="Your name" placeholderTextColor="#9AA0B2" value={name} onChangeText={setName} />
+
+              <Text style={[bi.label, { marginTop: 18 }]}>BIRTHDAY</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TextInput style={[bi.numInput, { flex: 1 }]} placeholder="DD" placeholderTextColor="#9AA0B2" keyboardType="number-pad" maxLength={2} value={day} onChangeText={setDay} />
+                <TextInput style={[bi.numInput, { flex: 1 }]} placeholder="MM" placeholderTextColor="#9AA0B2" keyboardType="number-pad" maxLength={2} value={month} onChangeText={setMonth} />
+                <TextInput style={[bi.numInput, { flex: 1.4 }]} placeholder="YYYY" placeholderTextColor="#9AA0B2" keyboardType="number-pad" maxLength={4} value={year} onChangeText={setYear} />
+              </View>
+              {!!error && <Text style={bi.error}>{error}</Text>}
+
+              <Text style={[bi.label, { marginTop: 20 }]}>GENDER</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                {GENDER_OPTIONS.map(opt => {
+                  const on = gender === opt;
+                  return (
+                    <TouchableOpacity key={opt} style={[bi.chip, on && bi.chipOn]} onPress={() => setGender(on ? null : opt)} activeOpacity={0.8}>
+                      <Text style={[bi.chipText, on && bi.chipTextOn]}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[bi.label, { marginTop: 18 }]}>PRONOUNS <Text style={{ fontFamily: 'HankenGrotesk_400Regular', letterSpacing: 0, textTransform: 'none', color: '#9AA0B2' }}>(up to 4)</Text></Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                {PRONOUN_OPTIONS.map(opt => {
+                  const on = pronouns.includes(opt);
+                  return (
+                    <TouchableOpacity key={opt} style={[bi.chip, on && bi.chipOn]} onPress={() => togglePronoun(opt)} activeOpacity={0.8}>
+                      <Text style={[bi.chipText, on && bi.chipTextOn]}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[bi.label, { marginTop: 18 }]}>LIFESTYLE</Text>
+              {LIFESTYLE_QUESTIONS.map(q => (
+                <View key={q.key} style={{ marginBottom: 14 }}>
+                  <Text style={bi.qLabel}>{q.label}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {LIFESTYLE_OPTIONS.map(opt => {
+                      const on = lifestyle[q.key] === opt;
+                      return (
+                        <TouchableOpacity key={opt} style={[bi.chip, on && bi.chipOn]} onPress={() => setLifestyleAnswer(q.key, on ? null : opt)} activeOpacity={0.8}>
+                          <Text style={[bi.chipText, on && bi.chipTextOn]}>{opt}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+              <View style={{ height: 20 }} />
+            </View>
+          </ScrollView>
+
+          <View style={{ paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0F1F5' }}>
+            <TouchableOpacity onPress={save} disabled={saving} activeOpacity={0.85}>
+              <LinearGradient colors={['#335CFF', '#8A5BFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ borderRadius: 50, paddingVertical: 16, alignItems: 'center' }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_700Bold', fontSize: 16, color: '#fff' }}>{saving ? 'Saving…' : 'Save'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Block list bottom sheet ───────────────────────────────────────────────────
+
+function BlockListSheet({ visible, onClose }) {
+  const insets = useSafeAreaInsets();
+  const [blocked, setBlocked] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetY = useRef(new Animated.Value(600)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 250, useNativeDriver: false }),
+        Animated.spring(sheetY, { toValue: 0, friction: 10, tension: 60, useNativeDriver: false }),
+      ]).start();
+      load();
+    } else {
+      backdropOpacity.setValue(0);
+      sheetY.setValue(600);
+    }
+  }, [visible]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      const profiles = await getBlockedProfiles(uid);
+      setBlocked(profiles);
+    } catch (_) {
+      setBlocked([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function animateClose() {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: false }),
+      Animated.timing(sheetY, { toValue: 600, duration: 220, useNativeDriver: false }),
+    ]).start(() => onClose());
+  }
+
+  async function unblock(target) {
+    setBlocked(prev => prev.filter(p => p.id !== target.id));
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) return;
+    await unblockUser(uid, target.id);
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={animateClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)', opacity: backdropOpacity }]} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
+        <Animated.View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: SCREEN_H * 0.7, paddingBottom: insets.bottom + 16, transform: [{ translateY: sheetY }] }}>
+          <View style={{ width: 40, height: 4, backgroundColor: '#E6E8EE', borderRadius: 2, alignSelf: 'center', marginTop: 16, marginBottom: 20 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 }}>
+            <Text style={{ fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18, color: '#14161B' }}>Block List</Text>
+            <TouchableOpacity onPress={animateClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F3F7', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={14} color="#14161B" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+            {loading ? (
+              <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#9AA0B2', textAlign: 'center', marginTop: 40 }}>Loading…</Text>
+            ) : blocked.length === 0 ? (
+              <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#9AA0B2', textAlign: 'center', marginTop: 40 }}>You haven't blocked anyone.</Text>
+            ) : (
+              blocked.map((b, i) => (
+                <View key={b.id} style={[bl.row, i < blocked.length - 1 && bl.rowBorder]}>
+                  <View style={bl.avatar}>
+                    {b.photo
+                      ? <Image source={{ uri: b.photo }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      : <Text style={{ fontFamily: 'SpaceGrotesk_700Bold', fontSize: 16, color: colors.slate }}>{(b.name?.[0] ?? '?').toUpperCase()}</Text>
+                    }
+                  </View>
+                  <Text style={bl.name}>{b.name}</Text>
+                  <TouchableOpacity style={bl.unblockBtn} onPress={() => unblock(b)} activeOpacity={0.8}>
+                    <Text style={bl.unblockText}>Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+            <View style={{ height: 20 }} />
+          </ScrollView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -739,6 +1038,8 @@ export default function Profile() {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [settingsSheet, setSettingsSheet] = useState(false);
   const [preferencesSheet, setPreferencesSheet] = useState(false);
+  const [basicInfoSheet, setBasicInfoSheet] = useState(false);
+  const [blockListSheet, setBlockListSheet] = useState(false);
   const settingsBackdrop = useRef(new Animated.Value(0)).current;
   const settingsSheetY = useRef(new Animated.Value(600)).current;
 
@@ -788,7 +1089,7 @@ export default function Profile() {
         if (!uid) return;
         const { data } = await supabase
           .from('profiles')
-          .select('id, name, birthday, gender, photos, preferred_areas, budget, prompts, onboarding_done, job_company, job_title, education_school, education_level')
+          .select('id, name, birthday, gender, pronouns, drink, tobacco, weed, photos, preferred_areas, budget, prompts, onboarding_done, job_company, job_title, education_school, education_level, verified')
           .eq('id', uid)
           .single();
         if (data) setProfile(data);
@@ -976,6 +1277,45 @@ export default function Profile() {
 
             <View style={p.divider} />
 
+            {/* Basic info */}
+            <View style={p.sectionHeader}>
+              <Text style={p.sectionTitle}>Basic Info</Text>
+              <TouchableOpacity onPress={() => setBasicInfoSheet(true)}>
+                <Text style={[p.sectionAction, { color: colors.blue }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+              <SettingsRow
+                iconBg="#EEF1FF" icon="person-outline" iconColor={colors.blue}
+                title="Name" subtitle={name}
+                onPress={() => setBasicInfoSheet(true)}
+              />
+              <SettingsRow
+                iconBg="#EEF1FF" icon="calendar-outline" iconColor={colors.blue}
+                title="Birthday" subtitle={profile?.birthday ? `${formatBirthday(profile.birthday)}${age ? ` · ${age} yrs` : ''}` : 'Not set'}
+                onPress={() => setBasicInfoSheet(true)}
+              />
+              <SettingsRow
+                iconBg="#F0EEFF" icon="male-female-outline" iconColor={colors.violet}
+                title="Gender" subtitle={profile?.gender ?? 'Not set'}
+                onPress={() => setBasicInfoSheet(true)}
+              />
+              <SettingsRow
+                iconBg="#F0EEFF" icon="chatbox-ellipses-outline" iconColor={colors.violet}
+                title="Pronouns" subtitle={Array.isArray(profile?.pronouns) && profile.pronouns.length ? profile.pronouns.join('/') : 'Not set'}
+                onPress={() => setBasicInfoSheet(true)}
+              />
+              <SettingsRow
+                iconBg="#FFF6EC" icon="wine-outline" iconColor="#FF8B3E"
+                title="Lifestyle"
+                subtitle={[profile?.drink && `Drinks: ${profile.drink}`, profile?.tobacco && `Tobacco: ${profile.tobacco}`, profile?.weed && `Cannabis: ${profile.weed}`].filter(Boolean).join(' · ') || 'Not set'}
+                onPress={() => setBasicInfoSheet(true)}
+                last
+              />
+            </View>
+
+            <View style={p.divider} />
+
             {/* About you */}
             <View style={p.sectionHeader}>
               <Text style={p.sectionTitle}>About you</Text>
@@ -1085,10 +1425,12 @@ export default function Profile() {
               <Text style={p.settingsCatLabel}>Verification</Text>
             </View>
             <SettingsRow
-              iconBg="#EEF1FF" icon="checkmark-circle-outline" iconColor={colors.blue}
+              iconBg={profile?.verified ? '#EEFCF3' : '#EEF1FF'} icon="checkmark-circle-outline"
+              iconColor={profile?.verified ? colors.success : colors.blue}
               title="Selfie Verification"
-              subtitle="Not done · Tap to verify"
-              subtitleColor="#FF8B3E"
+              subtitle={profile?.verified ? 'Verified' : "Not verified · Coming soon"}
+              subtitleColor={profile?.verified ? colors.success : '#9AA0B2'}
+              onPress={() => Alert.alert('Selfie verification', "Selfie verification isn't available yet — check back soon!")}
             />
             <View style={p.settingsSection}>
               <Text style={p.settingsCatLabel}>Controls</Text>
@@ -1105,11 +1447,24 @@ export default function Profile() {
               iconBg="#FFF0F3" icon="ban-outline" iconColor="#FF4D6A"
               title="Block List"
               subtitle="Manage blocked profiles"
+              onPress={() => setBlockListSheet(true)}
               last
             />
           </>
         )}
       </ScrollView>
+
+      <BasicInfoSheet
+        visible={basicInfoSheet}
+        profile={profile}
+        onSave={updates => { setProfile(prev => ({ ...prev, ...updates })); setBasicInfoSheet(false); }}
+        onClose={() => setBasicInfoSheet(false)}
+      />
+
+      <BlockListSheet
+        visible={blockListSheet}
+        onClose={() => setBlockListSheet(false)}
+      />
 
       <WorkEduSheet
         visible={workEduSheet}
@@ -1242,6 +1597,31 @@ const we = StyleSheet.create({
   label: { fontFamily: 'SpaceMono_400Regular', fontSize: 10, letterSpacing: 1.5, color: '#9AA0B2', marginBottom: 8 },
   hint: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#9AA0B2', marginTop: -4, marginBottom: 10 },
   input: { backgroundColor: '#F2F3F7', borderRadius: 14, padding: 14, fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: '#14161B' },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 50, borderWidth: 1.5, borderColor: '#E6E8EE', backgroundColor: '#F8F9FC' },
+  chipOn: { backgroundColor: colors.blue, borderColor: colors.blue },
+  chipText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: '#5A6072' },
+  chipTextOn: { color: '#fff' },
+});
+
+// ─── Block list sheet styles ───────────────────────────────────────────────────
+
+const bl = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F1F5' },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F2F3F7', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  name: { flex: 1, fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 14, color: '#14161B' },
+  unblockBtn: { backgroundColor: '#F2F3F7', borderRadius: 50, paddingHorizontal: 14, paddingVertical: 8 },
+  unblockText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 12, color: '#14161B' },
+});
+
+// ─── Basic info sheet styles ──────────────────────────────────────────────────
+
+const bi = StyleSheet.create({
+  label: { fontFamily: 'SpaceMono_400Regular', fontSize: 10, letterSpacing: 1.5, color: '#9AA0B2', marginBottom: 8 },
+  qLabel: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: '#14161B', marginBottom: 8 },
+  input: { backgroundColor: '#F2F3F7', borderRadius: 14, padding: 14, fontFamily: 'HankenGrotesk_400Regular', fontSize: 15, color: '#14161B' },
+  numInput: { backgroundColor: '#F2F3F7', borderRadius: 14, padding: 14, fontFamily: 'SpaceGrotesk_700Bold', fontSize: 16, textAlign: 'center', color: '#14161B' },
+  error: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: colors.error, marginTop: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 50, borderWidth: 1.5, borderColor: '#E6E8EE', backgroundColor: '#F8F9FC' },
   chipOn: { backgroundColor: colors.blue, borderColor: colors.blue },
   chipText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 13, color: '#5A6072' },

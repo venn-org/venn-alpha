@@ -166,7 +166,86 @@ CREATE POLICY "photos are public" ON storage.objects
 
 ---
 
-## 7. Realtime (optional – for live chat)
+## 7. Verified badge column
+
+```sql
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false;
+```
+
+---
+
+## 8. Reports table
+
+```sql
+CREATE TABLE IF NOT EXISTS reports (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reporter_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  reported_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  reason      text NOT NULL,
+  details     text,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+
+-- Users can only see reports they filed themselves
+CREATE POLICY "reports_select_own" ON reports
+  FOR SELECT USING (auth.uid() = reporter_id);
+
+-- Users can only file reports as themselves
+CREATE POLICY "reports_insert" ON reports
+  FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+```
+
+---
+
+## 9. Blocks table
+
+```sql
+CREATE TABLE IF NOT EXISTS blocks (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  blocker_id  uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  blocked_id  uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (blocker_id, blocked_id)
+);
+
+ALTER TABLE blocks ENABLE ROW LEVEL SECURITY;
+
+-- Users can see blocks they created, so their own client can filter their view
+CREATE POLICY "blocks_select" ON blocks
+  FOR SELECT USING (auth.uid() = blocker_id);
+
+-- Users can only create blocks as themselves
+CREATE POLICY "blocks_insert" ON blocks
+  FOR INSERT WITH CHECK (auth.uid() = blocker_id);
+
+-- Users can only remove their own blocks
+CREATE POLICY "blocks_delete" ON blocks
+  FOR DELETE USING (auth.uid() = blocker_id);
+```
+
+Note: the app also needs to know who has blocked *you* (to hide your profile
+from them and vice versa) but `blocks_select` only lets a user read rows
+where they are the `blocker_id`. To support mutual hiding without exposing
+who blocked whom, add a `SECURITY DEFINER` RPC instead of relaxing the
+select policy:
+
+```sql
+CREATE OR REPLACE FUNCTION get_blocked_pair_ids()
+RETURNS TABLE(user_id uuid) AS $$
+  SELECT blocked_id FROM blocks WHERE blocker_id = auth.uid()
+  UNION
+  SELECT blocker_id FROM blocks WHERE blocked_id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+```
+
+Call it from the client with `supabase.rpc('get_blocked_pair_ids')`.
+
+---
+
+## 10. Realtime (optional – for live chat)
 
 Enable realtime on the messages table in Supabase Dashboard:
 **Database → Replication → Tables → enable `messages`**

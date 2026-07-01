@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, Pressable, Image, Dimensions, Animated,
+  Modal, Pressable, Image, Dimensions, Animated, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,8 +11,10 @@ import { useRouter } from 'expo-router';
 import Svg, { Ellipse, Circle, Path, G } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getBlockedIds, blockUser } from '../../lib/blocks';
 import PreferencesSheet, { INIT_PREFS, savePrefsToSupabase } from '../../components/PreferencesSheet';
 import MatchCelebration from '../../components/MatchCelebration';
+import ReportSheet from '../../components/ReportSheet';
 
 const { width: W } = Dimensions.get('window');
 const CARD_W = (W - 48) / 2;
@@ -78,8 +80,9 @@ function LikeCard({ like, onPress }) {
   );
 }
 
-function ProfileOverlay({ like, visible, onClose, onPass, onLike }) {
+function ProfileOverlay({ like, visible, onClose, onPass, onLike, onBlock, onReport }) {
   const insets = useSafeAreaInsets();
+  const [menuOpen, setMenuOpen] = useState(false);
   const profile = like?.profiles;
   if (!profile) return null;
   const age = calcAge(profile.birthday);
@@ -90,10 +93,31 @@ function ProfileOverlay({ like, visible, onClose, onPass, onLike }) {
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[s.overlay, { height: '92%', paddingBottom: insets.bottom + 16 }]}>
+          <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+            <Pressable style={s.menuBackdrop} onPress={() => setMenuOpen(false)}>
+              <View style={s.menuBox}>
+                <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); onBlock(); }}>
+                  <Ionicons name="ban-outline" size={16} color={colors.ink} />
+                  <Text style={s.menuItemText}>Block</Text>
+                </TouchableOpacity>
+                <View style={s.menuDivider} />
+                <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); onReport(); }}>
+                  <Ionicons name="flag-outline" size={16} color="#FF4D6A" />
+                  <Text style={[s.menuItemText, { color: '#FF4D6A' }]}>Report</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Modal>
+
           <View style={s.overlayHeader}>
-            <TouchableOpacity style={s.overlayClose} onPress={onClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={16} color={colors.ink} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={s.overlayClose} onPress={onClose} activeOpacity={0.7}>
+                <Ionicons name="close" size={16} color={colors.ink} />
+              </TouchableOpacity>
+              <TouchableOpacity style={s.overlayClose} onPress={() => setMenuOpen(true)} activeOpacity={0.7}>
+                <Ionicons name="ellipsis-vertical" size={14} color={colors.ink} />
+              </TouchableOpacity>
+            </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity style={s.overlayPass} onPress={onPass} activeOpacity={0.8}>
                 <Ionicons name="close" size={20} color="#FF4D6A" />
@@ -218,6 +242,7 @@ export default function Likes() {
   const [showPrefs, setShowPrefs] = useState(false);
   const [prefs, setPrefs] = useState(INIT_PREFS);
   const [matchData, setMatchData] = useState(null);
+  const [reportTarget, setReportTarget] = useState(null);
   const gridFade = useRef(new Animated.Value(0)).current;
 
   useFocusEffect(useCallback(() => {
@@ -257,7 +282,7 @@ export default function Likes() {
         const uid = authData?.user?.id;
         if (!uid) return;
 
-        const [{ data: likesData }, { data: me }] = await Promise.all([
+        const [{ data: likesData }, { data: me }, blockedIds] = await Promise.all([
           supabase
             .from('likes')
             .select('id, from_user_id, comment, created_at, profiles!from_user_id(id, name, birthday, gender, photos, preferred_areas, budget, prompts, job_title, job_company, education_school, education_level)')
@@ -268,9 +293,10 @@ export default function Likes() {
             .select('pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
             .eq('id', uid)
             .single(),
+          getBlockedIds(uid),
         ]);
 
-        if (likesData) setLikes(likesData);
+        if (likesData) setLikes(likesData.filter(l => !blockedIds.has(l.from_user_id)));
         if (me) {
           setPrefs({
             role:       me.pref_role       ?? null,
@@ -318,6 +344,15 @@ export default function Likes() {
     } catch (_) {}
   }
 
+  async function handleBlockLike(like) {
+    setSelected(null);
+    setLikes(prev => prev.filter(l => l.id !== like.id));
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) return;
+    await blockUser(uid, like.from_user_id);
+  }
+
   const selectedLike = likes[selected];
 
   return (
@@ -358,6 +393,8 @@ export default function Likes() {
         onClose={() => setSelected(null)}
         onPass={() => setSelected(null)}
         onLike={() => handleLikeBack(selectedLike)}
+        onBlock={() => handleBlockLike(selectedLike)}
+        onReport={() => setReportTarget(selectedLike)}
       />
 
       <MatchCelebration
@@ -380,6 +417,14 @@ export default function Likes() {
         prefs={prefs}
         onSave={handleSavePrefs}
         onClose={() => setShowPrefs(false)}
+      />
+
+      <ReportSheet
+        visible={!!reportTarget}
+        targetId={reportTarget?.from_user_id}
+        targetName={reportTarget?.profiles?.name}
+        onClose={() => setReportTarget(null)}
+        onSubmitted={() => Alert.alert('Report submitted', "Thanks — we'll review it.")}
       />
     </View>
   );
@@ -409,6 +454,20 @@ const s = StyleSheet.create({
   likeInfo: { padding: 12 },
   likeName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 15, color: colors.ink, marginBottom: 2 },
   likeTime: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#9AA0B2' },
+
+  menuBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-start', alignItems: 'flex-start',
+    paddingTop: 120, paddingLeft: 20,
+  },
+  menuBox: {
+    backgroundColor: '#fff', borderRadius: 14, minWidth: 160,
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 4 },
+    elevation: 8, overflow: 'hidden',
+  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 16 },
+  menuItemText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: colors.ink },
+  menuDivider: { height: 1, backgroundColor: '#F0F1F5' },
 
   overlay: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, position: 'absolute', bottom: 0, left: 0, right: 0 },
   overlayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, paddingBottom: 10 },
