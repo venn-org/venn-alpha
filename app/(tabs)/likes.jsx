@@ -12,17 +12,13 @@ import Svg, { Ellipse, Circle, Path, G } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
+import { calcAge } from '../../lib/age';
 import PreferencesSheet, { INIT_PREFS, savePrefsToSupabase } from '../../components/PreferencesSheet';
 import MatchCelebration from '../../components/MatchCelebration';
 import ReportSheet from '../../components/ReportSheet';
 
 const { width: W } = Dimensions.get('window');
 const CARD_W = (W - 48) / 2;
-
-function calcAge(birthday) {
-  if (!birthday) return null;
-  return Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 3600 * 1000));
-}
 
 function EmptyIllustration() {
   return (
@@ -334,14 +330,17 @@ export default function Likes() {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      await supabase.from('likes').insert({ from_user_id: uid, to_user_id: like.from_user_id });
+      const { error: likeError } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: like.from_user_id });
+      if (likeError) { Alert.alert('Could not like back', likeError.message); return; }
       const u1 = uid < like.from_user_id ? uid : like.from_user_id;
       const u2 = uid < like.from_user_id ? like.from_user_id : uid;
       const { data: match } = await supabase
         .from('matches').select('id').eq('user1_id', u1).eq('user2_id', u2).maybeSingle();
       setLikes(prev => prev.filter(l => l.id !== like.id));
       setMatchData({ like, matchId: match?.id ?? null });
-    } catch (_) {}
+    } catch (e) {
+      Alert.alert('Could not like back', e.message);
+    }
   }
 
   async function handleBlockLike(like) {
@@ -350,7 +349,8 @@ export default function Likes() {
     const { data: authData } = await supabase.auth.getUser();
     const uid = authData?.user?.id;
     if (!uid) return;
-    await blockUser(uid, like.from_user_id);
+    const { error } = await blockUser(uid, like.from_user_id);
+    if (error) Alert.alert('Could not block', error.message);
   }
 
   const selectedLike = likes[selected];

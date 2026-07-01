@@ -26,6 +26,7 @@ export default function Lifestyle() {
 
   async function handleNext() {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({
       drink: answers.drink ?? null,
       tobacco: answers.tobacco ?? null,

@@ -26,9 +26,17 @@ export default function Phone() {
   async function handleContinue() {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: `+91${phone}` });
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: `+91${phone}`,
+        options: { shouldCreateUser: mode !== 'signin' },
+      });
       if (error) {
-        Alert.alert('Error', error.message);
+        Alert.alert(
+          'Error',
+          mode === 'signin' && /signup|not allowed|not found/i.test(error.message ?? '')
+            ? 'No account found with this phone number. Try creating one instead.'
+            : error.message
+        );
       } else {
         router.push(`/(auth)/phone-otp?phone=${phone}&mode=${mode}`);
       }

@@ -19,8 +19,9 @@ export default function Pronouns() {
   }
 
   async function handleNext() {
-    const { data: { user } } = await supabase.auth.getUser();
     if (selected.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
       const { error } = await supabase.from('profiles').update({ pronouns: selected }).eq('id', user.id);
       if (error) { Alert.alert('Save failed', error.message); return; }
     }

@@ -16,6 +16,12 @@ export default function Name() {
   async function handleContinue() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      Alert.alert('Session expired', 'Please sign in again.');
+      router.replace('/(auth)/login');
+      return;
+    }
     const { error } = await supabase.from('profiles').update({
       name: last.trim() ? `${first.trim()} ${last.trim()}` : first.trim(),
     }).eq('id', user.id);

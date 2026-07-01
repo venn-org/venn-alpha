@@ -12,7 +12,7 @@ export default function EmailOtp() {
   const inputs = useRef([]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { email } = useLocalSearchParams();
+  const { email, mode } = useLocalSearchParams();
 
   const slideY  = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -65,14 +65,21 @@ export default function EmailOtp() {
     // leave the user stuck here until a manual reload.
     const uid = data?.session?.user?.id;
     if (uid) {
-      const { data: p } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
-      router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
+      const { data: p, error: profileError } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
+      if (profileError) {
+        Alert.alert('Could not load profile', profileError.message);
+      } else {
+        router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
+      }
     }
     setLoading(false);
   }
 
   async function handleResend() {
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: mode !== 'signin' },
+    });
     if (error) Alert.alert('Error', error.message);
     else Alert.alert('Code resent', `A new code was sent to ${email}.`);
   }

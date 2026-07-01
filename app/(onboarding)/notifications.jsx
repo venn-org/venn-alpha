@@ -15,6 +15,12 @@ export default function Notifications() {
   async function finish() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      Alert.alert('Session expired', 'Please sign in again.');
+      router.replace('/(auth)/login');
+      return;
+    }
     const { error } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', user.id);
     if (error) { Alert.alert('Save failed', error.message); setLoading(false); return; }
     router.replace('/(tabs)/feed');

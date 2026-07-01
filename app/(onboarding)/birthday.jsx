@@ -16,9 +16,12 @@ export default function Birthday() {
     const d = parseInt(day), m = parseInt(month), y = parseInt(year);
     if (!d || !m || !y || y < 1900) { setError('Please enter a valid date.'); return false; }
     if (d < 1 || d > 31 || m < 1 || m > 12) { setError('Please enter a valid date.'); return false; }
+    const birthDate = new Date(y, m - 1, d);
+    if (birthDate.getFullYear() !== y || birthDate.getMonth() !== m - 1 || birthDate.getDate() !== d) {
+      setError('Please enter a valid date.'); return false;
+    }
     const today = new Date();
     const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-    const birthDate = new Date(y, m - 1, d);
     if (birthDate > eighteenYearsAgo) { setError('You must be at least 18 years old.'); return false; }
     setError('');
     return true;
@@ -28,6 +31,7 @@ export default function Birthday() {
     if (!validate()) return;
     const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({ birthday: iso }).eq('id', user.id);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/pronouns');

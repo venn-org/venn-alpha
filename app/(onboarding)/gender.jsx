@@ -17,6 +17,7 @@ export default function Gender() {
   async function handleNext() {
     if (!selected) return;
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({ gender: selected }).eq('id', user.id);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/lifestyle');

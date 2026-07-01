@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Animated } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
@@ -12,6 +12,7 @@ export default function EmailSignIn() {
   const [error, setError] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { mode } = useLocalSearchParams();
 
   const slideY = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -27,11 +28,18 @@ export default function EmailSignIn() {
     setLoading(true);
     setError('');
     try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: mode !== 'signin' },
+      });
       if (error) {
-        setError(error.message || error.error_description || JSON.stringify(error));
+        setError(
+          mode === 'signin' && /signup|not allowed|not found/i.test(error.message ?? '')
+            ? 'No account found with this email. Try creating one instead.'
+            : error.message || error.error_description || JSON.stringify(error)
+        );
       } else {
-        router.push(`/(auth)/email-otp?email=${encodeURIComponent(email)}`);
+        router.push(`/(auth)/email-otp?email=${encodeURIComponent(email)}&mode=${mode ?? ''}`);
       }
     } catch (e) {
       setError(e.message || 'Something went wrong. Check your connection.');

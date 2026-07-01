@@ -13,6 +13,7 @@ import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-na
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
+import { calcAge } from '../../lib/age';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
@@ -81,19 +82,6 @@ function getPromptCategory(q) {
     if (qs.includes(q)) return cat;
   }
   return null;
-}
-
-function calcAge(birthday) {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (isNaN(b.getTime())) return null;
-  const today = new Date();
-  let age = today.getUTCFullYear() - b.getUTCFullYear();
-  const monthDiff = today.getUTCMonth() - b.getUTCMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < b.getUTCDate())) {
-    age--;
-  }
-  return age;
 }
 
 function formatBirthday(iso) {
@@ -503,12 +491,13 @@ function WorkEduSheet({ visible, profile, onSave, onClose }) {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         job_company: company.trim() || null,
         job_title: jobTitle.trim() || null,
         education_school: school.trim() || null,
         education_level: eduLevel,
       }).eq('id', uid);
+      if (error) { Alert.alert('Save failed', error.message); return; }
       onSave({ job_company: company.trim() || null, job_title: jobTitle.trim() || null, education_school: school.trim() || null, education_level: eduLevel });
     } catch (e) {
       Alert.alert('Save failed', e.message);
@@ -978,7 +967,8 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
+      const { error } = await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
+      if (error) { Alert.alert('Save failed', error.message); return; }
       onSave({ budget, preferred_areas: areas.length ? areas : null });
     } catch (e) {
       Alert.alert('Save failed', e.message);
@@ -1044,7 +1034,7 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState('profile');
   const [commentFilter, setCommentFilter] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingIndex, setUploadingIndex] = useState(null);
   const [workEduSheet, setWorkEduSheet] = useState(false);
   const [promptSheet, setPromptSheet] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState(null);
@@ -1112,17 +1102,19 @@ export default function Profile() {
   }, []);
 
   async function pickPhoto(index) {
-    if (uploading) return; // avoid concurrent picks racing on the same profile.photos snapshot
+    if (uploadingIndex !== null) return; // avoid concurrent picks racing on the same profile.photos snapshot
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!granted) { Alert.alert('Permission needed', 'Please allow photo access in Settings.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (result.canceled) return;
     const asset = result.assets[0];
-    setUploading(true);
+    setUploadingIndex(index);
     try {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
-      const ext = asset.uri.split('.').pop()?.split('?')[0] || 'jpg';
+      const lastSegment = asset.uri.split('?')[0].split('/').pop() || '';
+      const dotIndex = lastSegment.lastIndexOf('.');
+      const ext = dotIndex > 0 && dotIndex < lastSegment.length - 1 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';
       const path = `${uid}/${Date.now()}.${ext}`;
       const blob = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -1142,7 +1134,7 @@ export default function Profile() {
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
-      setUploading(false);
+      setUploadingIndex(null);
     }
   }
 
@@ -1281,7 +1273,7 @@ export default function Profile() {
                 <TouchableOpacity key={i} style={p.photoSlot} onPress={() => pickPhoto(i)} activeOpacity={0.8}>
                   {photos[i]
                     ? <Image source={{ uri: photos[i] }} style={[StyleSheet.absoluteFill, { borderRadius: 14 }]} resizeMode="cover" />
-                    : uploading && i === photos.length
+                    : uploadingIndex === i
                       ? <ActivityIndicator size="small" color={colors.blue} />
                       : <Ionicons name="add" size={24} color="#C0C5D0" />
                   }

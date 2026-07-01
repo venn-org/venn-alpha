@@ -31,6 +31,7 @@ export default function TabsLayout() {
 
   useEffect(() => {
     let channel;
+    let cancelled = false;
 
     async function refresh() {
       const uid = uidRef.current;
@@ -48,9 +49,10 @@ export default function TabsLayout() {
     async function init() {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
-      if (!uid) return;
+      if (!uid || cancelled) return;
       uidRef.current = uid;
       await refresh();
+      if (cancelled) return;
 
       channel = supabase
         .channel(`tab-notifs-${uid}`)
@@ -59,7 +61,10 @@ export default function TabsLayout() {
     }
     init();
 
-    return () => { if (channel) supabase.removeChannel(channel); };
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   return (

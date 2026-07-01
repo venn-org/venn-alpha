@@ -9,13 +9,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
+import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
 
 const SW = Dimensions.get('window').width;
 
 const STANDOUTS = [
   {
-    id: 's1', name: 'Tanvi', age: 25, verified: false,
+    id: 's1', name: 'Tanvi', age: 25, verified: false, _demo: true,
     photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&q=80',
     area: 'Bandra West', rent: '₹18k / mo',
     prompt: 'The thing that makes my flat special',
@@ -29,7 +30,7 @@ const STANDOUTS = [
     ],
   },
   {
-    id: 's2', name: 'Manisha', age: 27, verified: true,
+    id: 's2', name: 'Manisha', age: 27, verified: true, _demo: true,
     photo: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&q=80',
     area: 'Andheri East', rent: '₹12k / mo',
     prompt: 'My flat vibe is',
@@ -43,7 +44,7 @@ const STANDOUTS = [
     ],
   },
   {
-    id: 's3', name: 'Sakshi', age: 24, verified: true,
+    id: 's3', name: 'Sakshi', age: 24, verified: true, _demo: true,
     photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=80',
     area: 'Powai', rent: '₹15k / mo',
     prompt: 'One non-negotiable in my flat',
@@ -57,7 +58,7 @@ const STANDOUTS = [
     ],
   },
   {
-    id: 's4', name: 'Rohan', age: 26, verified: false,
+    id: 's4', name: 'Rohan', age: 26, verified: false, _demo: true,
     photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80',
     area: 'Khar', rent: '₹20k / mo',
     prompt: 'Living with me means',
@@ -71,7 +72,7 @@ const STANDOUTS = [
     ],
   },
   {
-    id: 's5', name: 'Divya', age: 22, verified: true,
+    id: 's5', name: 'Divya', age: 22, verified: true, _demo: true,
     photo: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=80',
     area: 'Goregaon West', rent: '₹10k / mo',
     prompt: 'My flat in three words',
@@ -85,7 +86,7 @@ const STANDOUTS = [
     ],
   },
   {
-    id: 's6', name: 'Kabir', age: 28, verified: false,
+    id: 's6', name: 'Kabir', age: 28, verified: false, _demo: true,
     photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&q=80',
     area: 'Lower Parel', rent: '₹22k / mo',
     prompt: 'The best thing about my flat',
@@ -118,6 +119,7 @@ export default function Standouts() {
   const [keyNote, setKeyNote] = useState('');
   const [keyTarget, setKeyTarget] = useState('');
   const [keyTargetId, setKeyTargetId] = useState(null);
+  const [keyTargetDemo, setKeyTargetDemo] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
 
@@ -189,9 +191,7 @@ export default function Standouts() {
         ]);
         if (data && data.length > 0) {
           const mapped = data.filter(p => !blockedIds.has(p.id)).map(p => {
-            const age = p.birthday
-              ? Math.floor((Date.now() - new Date(p.birthday).getTime()) / (365.25 * 24 * 3600 * 1000))
-              : 25;
+            const age = calcAge(p.birthday) ?? 25;
             return {
               id: p.id, name: p.name ?? 'Unknown', age, verified: !!p.verified,
               photo: Array.isArray(p.photos) ? p.photos[0] : null,
@@ -222,22 +222,26 @@ export default function Standouts() {
     outputRange: ['-20deg', '0deg', '20deg'],
   });
 
-  function openKeySheet(name, id) {
+  function openKeySheet(name, id, demo) {
     setKeyTarget(name);
     setKeyTargetId(id ?? null);
+    setKeyTargetDemo(!!demo);
     setKeyNote('');
     setShowKeySheet(true);
   }
 
   async function sendKey() {
     setShowKeySheet(false);
-    if (!keyTargetId || String(keyTargetId).startsWith('s')) return; // skip demo
+    if (!keyTargetId || keyTargetDemo) return;
     try {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (!uid) return;
-      await supabase.from('likes').insert({ from_user_id: uid, to_user_id: keyTargetId, comment: keyNote || null });
-    } catch (_) {}
+      const { error } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: keyTargetId, comment: keyNote || null });
+      if (error) Alert.alert('Could not send', error.message);
+    } catch (e) {
+      Alert.alert('Could not send', e.message);
+    }
   }
 
   function advanceCard(liked) {
@@ -253,17 +257,18 @@ export default function Standouts() {
       const prev = profileRef.current;
       idxRef.current += 1;
       setDisplayIdx(idxRef.current);
-      if (liked) openKeySheet(prev.name, prev.id);
+      if (liked) openKeySheet(prev.name, prev.id, prev._demo);
     });
   }
 
   async function handleBlock(target) {
     setProfiles(prev => prev.filter(p => p.id !== target.id));
-    if (String(target.id).startsWith('s')) return; // demo profile
+    if (!target?.id || target._demo) return;
     const { data: authData } = await supabase.auth.getUser();
     const uid = authData?.user?.id;
     if (!uid) return;
-    await blockUser(uid, target.id);
+    const { error } = await blockUser(uid, target.id);
+    if (error) Alert.alert('Could not block', error.message);
   }
 
   const panResponder = useRef(

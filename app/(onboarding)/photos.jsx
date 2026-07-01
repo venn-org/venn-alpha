@@ -8,11 +8,20 @@ import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 
+function getExtension(uri) {
+  const lastSegment = uri.split('?')[0].split('/').pop() || '';
+  const dotIndex = lastSegment.lastIndexOf('.');
+  if (dotIndex > 0 && dotIndex < lastSegment.length - 1) {
+    return lastSegment.slice(dotIndex + 1).toLowerCase();
+  }
+  return 'jpg'; // e.g. content:// URIs with no literal file extension
+}
+
 async function uploadToStorage(uri) {
   const { data: authData } = await supabase.auth.getUser();
   const uid = authData?.user?.id;
   if (!uid) throw new Error('Not signed in');
-  const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+  const ext = getExtension(uri);
   const path = `${uid}/${Date.now()}.${ext}`;
   const blob = await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -43,6 +52,7 @@ export default function Photos() {
   useEffect(() => {
     async function loadUserType() {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       const { data } = await supabase.from('profiles').select('user_type').eq('id', user.id).single();
       setUserType(data?.user_type ?? 'seeking');
     }
@@ -55,6 +65,7 @@ export default function Photos() {
     : !!profilePhoto;
 
   async function pickPhoto(onDone, aspect) {
+    if (uploading) return; // avoid concurrent picks racing on the shared uploading flag
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!granted) {
       Alert.alert('Permission needed', 'Please allow photo access in Settings.');
@@ -63,6 +74,8 @@ export default function Photos() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
+      allowsEditing: true,
+      aspect,
     });
     if (result.canceled) return;
     const asset = result.assets[0];

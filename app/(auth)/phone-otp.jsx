@@ -65,14 +65,21 @@ export default function PhoneOtp() {
     // leave the user stuck here until a manual reload.
     const uid = data?.session?.user?.id;
     if (uid) {
-      const { data: p } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
-      router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
+      const { data: p, error: profileError } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
+      if (profileError) {
+        Alert.alert('Could not load profile', profileError.message);
+      } else {
+        router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
+      }
     }
     setLoading(false);
   }
 
   async function handleResend() {
-    const { error } = await supabase.auth.signInWithOtp({ phone: `+91${phone}` });
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: `+91${phone}`,
+      options: { shouldCreateUser: mode !== 'signin' },
+    });
     if (error) Alert.alert('Error', error.message);
     else Alert.alert('Code resent', `A new code was sent to +91 ${phone}.`);
   }

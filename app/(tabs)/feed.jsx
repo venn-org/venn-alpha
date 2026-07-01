@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
+import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
 import PreferencesSheet, {
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
@@ -236,9 +237,7 @@ const DEMO = [
 ];
 
 function normaliseProfile(p) {
-  const age = p.birthday
-    ? Math.floor((Date.now() - new Date(p.birthday).getTime()) / (365.25 * 24 * 3600 * 1000))
-    : null;
+  const age = calcAge(p.birthday);
   return {
     id: p.id, name: p.name ?? 'Unknown', overlap: null, age,
     pronouns: Array.isArray(p.pronouns) ? p.pronouns.join('/') : null,
@@ -615,6 +614,7 @@ export default function Feed() {
   const uidRef = useRef(null);
   const myInfoRef = useRef({ name: null, photo: null });
   const skippedRef = useRef([]);
+  const savingPrefsRef = useRef(false);
 
   const profile = profiles[idx] ?? null;
   const canBack = idx > 0;
@@ -651,7 +651,8 @@ export default function Feed() {
     if (!p?.id || p._demo) return;
     const uid = uidRef.current;
     if (!uid) return;
-    await blockUser(uid, p.id);
+    const { error } = await blockUser(uid, p.id);
+    if (error) Alert.alert('Could not block', error.message);
   }
 
   function openLikeSheet(p) {
@@ -671,7 +672,8 @@ export default function Feed() {
     try {
       const uid = uidRef.current;
       if (!uid) return;
-      await supabase.from('likes').insert({ from_user_id: uid, to_user_id: p.id, comment: likeComment.trim() || null });
+      const { error: likeError } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: p.id, comment: likeComment.trim() || null });
+      if (likeError) { Alert.alert('Could not send like', likeError.message); return; }
       // Requires a DB trigger: when both users have liked each other, insert a row
       // into matches(user1_id, user2_id) where user1_id < user2_id.
       const u1 = uid < p.id ? uid : p.id;
@@ -683,7 +685,9 @@ export default function Feed() {
       if (match) {
         setMatchModal({ name: p.name, photo: p.photo ?? null, matchId: match.id });
       }
-    } catch (_) {}
+    } catch (e) {
+      Alert.alert('Could not send like', e.message);
+    }
     setLikeSending(false);
   }
 
@@ -691,14 +695,17 @@ export default function Feed() {
     setPrefs(draft);
     setBannerDismissed(true);
     setShowPrefs(false);
-    savePrefsToSupabase(draft);
+    savingPrefsRef.current = true;
+    await savePrefsToSupabase(draft);
+    savingPrefsRef.current = false;
   }
 
   function handleQuickSave(key, val) {
     const updated = { ...prefs, [key]: val };
     setPrefs(updated);
     setBannerDismissed(true);
-    savePrefsToSupabase(updated);
+    savingPrefsRef.current = true;
+    savePrefsToSupabase(updated).finally(() => { savingPrefsRef.current = false; });
   }
 
   useFocusEffect(useCallback(() => {
@@ -711,7 +718,10 @@ export default function Feed() {
         .select('pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
         .eq('id', uid)
         .single();
-      if (me) {
+      // Skip if a save triggered from this screen is still in flight — otherwise
+      // a quick-focus-away-and-back can overwrite the just-applied local prefs
+      // with the not-yet-updated DB row.
+      if (me && !savingPrefsRef.current) {
         setPrefs({
           role:       me.pref_role       ?? null,
           areas:      me.pref_areas      ?? [],

@@ -126,15 +126,21 @@ export default function Chat() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
         (payload) => {
           const msg = payload.new;
-          if (msg.sender_id === uid) return; // already added optimistically
+          // Compare against the ref (not just the closure `uid`, which is only
+          // assigned once load()'s own getUser() resolves) so a message sent
+          // before that resolves can't slip past this check.
+          if (msg.sender_id === (uidRef.current ?? uid)) return;
           // Only auto-scroll if the user was already near the bottom — otherwise
           // a message arriving while they're reading older (paginated-in) history
           // shouldn't yank them back down.
           const nearBottom = contentHeightRef.current - (scrollYRef.current + viewportHeightRef.current) < 100;
-          setMessages(prev => [...prev, {
-            id: msg.id, content: msg.content, mine: false, read: msg.read,
-            time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          }]);
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev; // already present (e.g. optimistic id already reconciled)
+            return [...prev, {
+              id: msg.id, content: msg.content, mine: false, read: msg.read,
+              time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            }];
+          });
           if (nearBottom) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
           // Chat is open and visible — mark this incoming message read right away.
           if (uid && otherId) markRead(uid, otherId);
@@ -157,6 +163,7 @@ export default function Chat() {
     channelRef.current = channel;
 
     return () => {
+      if (uid) channel.send({ type: 'broadcast', event: 'typing', payload: { userId: uid, typing: false } });
       supabase.removeChannel(channel);
       channelRef.current = null;
       clearInterval(statusInterval);

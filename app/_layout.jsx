@@ -139,13 +139,15 @@ export default function RootLayout() {
     }
 
     if (inTabs) {
-      supabase.from('profiles').select('onboarding_done').eq('id', session.user.id).single().then(({ data: p }) => {
-        if (p?.onboarding_done) {
-          setProfileComplete(true);
-        } else {
-          router.replace('/(onboarding)/name');
-        }
-      });
+      supabase.from('profiles').select('onboarding_done').eq('id', session.user.id).single()
+        .then(({ data: p }) => {
+          if (p?.onboarding_done) {
+            setProfileComplete(true);
+          } else {
+            router.replace('/(onboarding)/name');
+          }
+        })
+        .catch(() => {});
     } else if (!inOnboarding) {
       router.replace('/(onboarding)/name');
     }
