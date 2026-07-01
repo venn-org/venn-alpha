@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, TextInput, KeyboardAvoidingView, Platform, Image, Animated,
+  ScrollView, TextInput, KeyboardAvoidingView, Platform, Image, Animated, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +21,8 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { name, matchId, photo, prefill } = useLocalSearchParams();
-  const [messages, setMessages] = useState(DEMO_MESSAGES);
+  const [messages, setMessages] = useState(matchId ? [] : DEMO_MESSAGES);
+  const [loadingMsgs, setLoadingMsgs] = useState(!!matchId);
   const [text, setText] = useState(prefill ?? '');
   const scrollRef = useRef(null);
   const displayName = name ?? 'Chat';
@@ -42,18 +43,21 @@ export default function Chat() {
       try {
         const { data: authData } = await supabase.auth.getUser();
         uid = authData?.user?.id;
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('messages')
           .select('id, content, sender_id, created_at')
           .eq('match_id', matchId)
           .order('created_at', { ascending: true });
-        if (data && data.length > 0) {
-          setMessages(data.map(m => ({
-            id: m.id, content: m.content, mine: m.sender_id === uid,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          })));
-        }
-      } catch (_) {}
+        if (error) throw error;
+        setMessages((data ?? []).map(m => ({
+          id: m.id, content: m.content, mine: m.sender_id === uid,
+          time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        })));
+      } catch (e) {
+        Alert.alert('Could not load messages', e.message);
+      } finally {
+        setLoadingMsgs(false);
+      }
     }
 
     load();
@@ -79,16 +83,22 @@ export default function Chat() {
     const trimmed = text.trim();
     if (!trimmed) return;
     animateSend();
-    const msg = { id: Date.now().toString(), content: trimmed, mine: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    const localId = Date.now().toString();
+    const msg = { id: localId, content: trimmed, mine: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setMessages(prev => [...prev, msg]);
     setText('');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    if (matchId) {
-      try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
-        if (uid) await supabase.from('messages').insert({ match_id: matchId, sender_id: uid, content: trimmed });
-      } catch (_) {}
+    if (!matchId) return;
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) throw new Error('Not signed in');
+      const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: uid, content: trimmed });
+      if (error) throw error;
+    } catch (e) {
+      setMessages(prev => prev.filter(m => m.id !== localId));
+      setText(trimmed);
+      Alert.alert('Message not sent', e.message);
     }
   }
 
@@ -123,7 +133,11 @@ export default function Chat() {
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
           showsVerticalScrollIndicator={false}
         >
-          {messages.map(msg => (
+          {loadingMsgs ? (
+            <Text style={s.emptyText}>Loading…</Text>
+          ) : messages.length === 0 ? (
+            <Text style={s.emptyText}>Say hi to {displayName} 👋</Text>
+          ) : messages.map(msg => (
             <View key={msg.id} style={[s.msgRow, msg.mine && s.msgRowMine]}>
               {!msg.mine && <View style={s.msgAvatar}><Text style={s.msgAvatarText}>{(displayName[0] ?? '?').toUpperCase()}</Text></View>}
               <View style={{ maxWidth: '72%' }}>
@@ -176,6 +190,7 @@ const s = StyleSheet.create({
 
   messages: { flex: 1 },
   messagesContent: { padding: 16, gap: 12, paddingBottom: 8 },
+  emptyText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: '#9AA0B2', textAlign: 'center', marginTop: 40 },
 
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   msgRowMine: { flexDirection: 'row-reverse' },

@@ -77,19 +77,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="matches"
-        options={{
-          title: 'Matches',
-          tabBarIcon: ({ focused }) => (
-            <Ionicons
-              name={focused ? 'sparkles' : 'sparkles-outline'}
-              size={22}
-              color={focused ? colors.blue : '#14161B'}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="messages"
         options={{
           title: 'Messages',
