@@ -24,60 +24,67 @@ export default function Login() {
   }, []);
 
   return (
-    <ImageBackground source={require('../../assets/hero.jpeg')} style={styles.bg} resizeMode="cover">
-      {/* grain effect */}
-      <View style={styles.grain} />
-      {/* gradients */}
-      <View style={styles.topFade} />
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.72)', 'rgba(0,0,0,0.92)']}
-        style={styles.bottomFade}
-      />
+    <View style={styles.frame}>
+      <ImageBackground source={require('../../assets/hero.jpeg')} style={styles.bg} resizeMode="cover">
+        {/* grain effect */}
+        <View style={styles.grain} />
+        {/* gradients */}
+        <View style={styles.topFade} />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.72)', 'rgba(0,0,0,0.92)']}
+          style={styles.bottomFade}
+        />
 
-      {/* top: logo + headline */}
-      <Animated.View style={[styles.top, { paddingTop: insets.top + 40 }, { opacity: topOpacity, transform: [{ translateY: topY }] }]}>
-        <View style={styles.logoWrap}>
-          <View style={[styles.circle, { backgroundColor: colors.blue, left: 0 }]} />
-          <View style={[styles.circle, { backgroundColor: colors.violet, right: 0, opacity: 0.92 }]} />
-        </View>
-        <Text style={styles.appName}>Venn</Text>
-        <Text style={styles.headline}>Find where your lives{'\n'}overlap.</Text>
-        <Text style={styles.tagline}>The flatmate app designed to be deleted.</Text>
-      </Animated.View>
+        {/* top: logo + headline */}
+        <Animated.View style={[styles.top, { paddingTop: insets.top + 40 }, { opacity: topOpacity, transform: [{ translateY: topY }] }]}>
+          <View style={styles.logoWrap}>
+            <View style={[styles.circle, { backgroundColor: colors.blue, left: 0 }]} />
+            <View style={[styles.circle, { backgroundColor: colors.violet, right: 0, opacity: 0.92 }]} />
+          </View>
+          <Text style={styles.appName}>Venn</Text>
+          <Text style={styles.headline}>Find where your lives{'\n'}overlap.</Text>
+          <Text style={styles.tagline}>The flatmate app designed to be deleted.</Text>
+        </Animated.View>
 
-      {/* bottom: buttons */}
-      <Animated.View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }, { opacity: bottomOp, transform: [{ translateY: bottomY }] }]}>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => router.push('/(auth)/signup')}
-          activeOpacity={0.85}
-        >
-          <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-            <Text style={styles.primaryBtnText}>Create account</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* bottom: buttons */}
+        <Animated.View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }, { opacity: bottomOp, transform: [{ translateY: bottomY }] }]}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.push('/(auth)/signup')}
+            activeOpacity={0.85}
+          >
+            <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
+              <Text style={styles.primaryBtnText}>Create account</Text>
+            </LinearGradient>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.ghostBtn}
-          onPress={() => router.push('/(auth)/signin')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.ghostBtnText}>Sign in</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.ghostBtn}
+            onPress={() => router.push('/(auth)/signin')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ghostBtnText}>Sign in</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.legal}>
-          By tapping Create account or Sign in, you agree to our{' '}
-          <Text style={styles.legalLink}>Terms</Text>. Learn how we process your data in our{' '}
-          <Text style={styles.legalLink}>Privacy Policy</Text> and{' '}
-          <Text style={styles.legalLink}>Cookies Policy</Text>.
-        </Text>
-      </Animated.View>
-    </ImageBackground>
+          <Text style={styles.legal}>
+            By tapping Create account or Sign in, you agree to our{' '}
+            <Text style={styles.legalLink}>Terms</Text>. Learn how we process your data in our{' '}
+            <Text style={styles.legalLink}>Privacy Policy</Text> and{' '}
+            <Text style={styles.legalLink}>Cookies Policy</Text>.
+          </Text>
+        </Animated.View>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#000', ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  // The explicit height lives on this wrapper, not on ImageBackground itself —
+  // ImageBackground (react-native-web) copies width/height straight from its own
+  // style onto the inner image layer, and doing that with height set but no
+  // matching width breaks the image's fill sizing on some mobile browsers.
+  frame: { flex: 1, ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  bg: { flex: 1, backgroundColor: '#000' },
   grain: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.06)' },
   topFade: { position: 'absolute', top: 0, left: 0, right: 0, height: '22%', backgroundColor: 'rgba(0,0,0,0.28)' },
   bottomFade: { position: 'absolute', top: '42%', left: 0, right: 0, bottom: 0 },

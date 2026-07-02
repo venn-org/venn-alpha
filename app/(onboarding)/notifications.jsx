@@ -27,45 +27,52 @@ export default function Notifications() {
   }
 
   return (
-    <ImageBackground source={require('../../assets/notif-bg.jpeg')} style={styles.bg} resizeMode="cover">
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={styles.overlay} />
+    <View style={styles.frame}>
+      <ImageBackground source={require('../../assets/notif-bg.jpeg')} style={styles.bg} resizeMode="cover">
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={styles.overlay} />
 
-      <View style={[styles.content, { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 40 }]}>
-        <View style={styles.top}>
-          <Text style={styles.title}>Don't miss when someone wants to connect</Text>
-          <Text style={styles.subtitle}>Enable notifications to stay on top of your matches and messages.</Text>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardLeft}>
-            <View style={styles.notifIcon}>
-              <Text style={{ fontSize: 20 }}>💙</Text>
-            </View>
-            <View>
-              <Text style={styles.cardTitle}>Match notifications</Text>
-              <Text style={styles.cardSub}>Get notified when you match</Text>
-            </View>
+        <View style={[styles.content, { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 40 }]}>
+          <View style={styles.top}>
+            <Text style={styles.title}>Don't miss when someone wants to connect</Text>
+            <Text style={styles.subtitle}>Enable notifications to stay on top of your matches and messages.</Text>
           </View>
-          <Switch
-            value={enabled}
-            onValueChange={setEnabled}
-            trackColor={{ false: colors.mist, true: colors.blue }}
-            thumbColor="#fff"
-          />
-        </View>
 
-        <TouchableOpacity style={[styles.btn, loading && styles.btnDisabled]} onPress={finish} disabled={loading} activeOpacity={0.85}>
-          <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-            <Text style={styles.btnText}>{loading ? 'Finishing…' : 'Continue'}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </ImageBackground>
+          <View style={styles.card}>
+            <View style={styles.cardLeft}>
+              <View style={styles.notifIcon}>
+                <Text style={{ fontSize: 20 }}>💙</Text>
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Match notifications</Text>
+                <Text style={styles.cardSub}>Get notified when you match</Text>
+              </View>
+            </View>
+            <Switch
+              value={enabled}
+              onValueChange={setEnabled}
+              trackColor={{ false: colors.mist, true: colors.blue }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <TouchableOpacity style={[styles.btn, loading && styles.btnDisabled]} onPress={finish} disabled={loading} activeOpacity={0.85}>
+            <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
+              <Text style={styles.btnText}>{loading ? 'Finishing…' : 'Continue'}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#000', ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  // The explicit height lives on this wrapper, not on ImageBackground itself —
+  // ImageBackground (react-native-web) copies width/height straight from its own
+  // style onto the inner image layer, and doing that with height set but no
+  // matching width breaks the image's fill sizing on some mobile browsers.
+  frame: { flex: 1, ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  bg: { flex: 1, backgroundColor: '#000' },
   overlay: { position: 'absolute', top: '25%', left: 0, right: 0, bottom: 0 },
   content: { flex: 1, paddingHorizontal: 28, justifyContent: 'space-between' },
   top: { gap: 12 },

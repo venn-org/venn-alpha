@@ -20,42 +20,49 @@ export default function SignIn() {
   }, []);
 
   return (
-    <ImageBackground source={require('../../assets/hero.jpeg')} style={styles.bg} resizeMode="cover">
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.92)']} style={styles.overlay} />
+    <View style={styles.frame}>
+      <ImageBackground source={require('../../assets/hero.jpeg')} style={styles.bg} resizeMode="cover">
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.92)']} style={styles.overlay} />
 
-      <TouchableOpacity style={[styles.back, { top: insets.top + 12 }]} onPress={() => router.back()}>
-        <View style={styles.backCircle}>
-          <Text style={styles.backArrow}>‹</Text>
-        </View>
-      </TouchableOpacity>
-
-      <Animated.View style={[styles.content, { paddingBottom: insets.bottom + 40 }, { opacity, transform: [{ translateY: slideY }] }]}>
-        <View style={styles.logoRow}>
-          <View style={styles.logoWrap}>
-            <View style={[styles.circle, { backgroundColor: colors.blue, left: 0 }]} />
-            <View style={[styles.circle, { backgroundColor: colors.violet, right: 0, opacity: 0.9 }]} />
+        <TouchableOpacity style={[styles.back, { top: insets.top + 12 }]} onPress={() => router.back()}>
+          <View style={styles.backCircle}>
+            <Text style={styles.backArrow}>‹</Text>
           </View>
-          <Text style={styles.appName}>Venn</Text>
-        </View>
-        <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to continue finding your flatmate.</Text>
-
-        <TouchableOpacity style={styles.phoneBtn} onPress={() => router.push('/(auth)/phone?mode=signin')} activeOpacity={0.9}>
-          <Text style={styles.phoneBtnIcon}>📞</Text>
-          <Text style={styles.phoneBtnText}>Sign in with phone</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email?mode=signin')} activeOpacity={0.85}>
-          <Text style={styles.emailBtnIcon}>✉</Text>
-          <Text style={styles.emailBtnText}>Sign in with email</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </ImageBackground>
+        <Animated.View style={[styles.content, { paddingBottom: insets.bottom + 40 }, { opacity, transform: [{ translateY: slideY }] }]}>
+          <View style={styles.logoRow}>
+            <View style={styles.logoWrap}>
+              <View style={[styles.circle, { backgroundColor: colors.blue, left: 0 }]} />
+              <View style={[styles.circle, { backgroundColor: colors.violet, right: 0, opacity: 0.9 }]} />
+            </View>
+            <Text style={styles.appName}>Venn</Text>
+          </View>
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>Sign in to continue finding your flatmate.</Text>
+
+          <TouchableOpacity style={styles.phoneBtn} onPress={() => router.push('/(auth)/phone?mode=signin')} activeOpacity={0.9}>
+            <Text style={styles.phoneBtnIcon}>📞</Text>
+            <Text style={styles.phoneBtnText}>Sign in with phone</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email?mode=signin')} activeOpacity={0.85}>
+            <Text style={styles.emailBtnIcon}>✉</Text>
+            <Text style={styles.emailBtnText}>Sign in with email</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#111', ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  // The explicit height lives on this wrapper, not on ImageBackground itself —
+  // ImageBackground (react-native-web) copies width/height straight from its own
+  // style onto the inner image layer, and doing that with height set but no
+  // matching width breaks the image's fill sizing on some mobile browsers.
+  frame: { flex: 1, ...Platform.select({ web: { height: '100dvh', overflow: 'hidden' } }) },
+  bg: { flex: 1, backgroundColor: '#111' },
   overlay: { position: 'absolute', top: '30%', left: 0, right: 0, bottom: 0 },
   back: { position: 'absolute', left: 24, zIndex: 10 },
   backCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
