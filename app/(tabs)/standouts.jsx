@@ -455,12 +455,6 @@ export default function Standouts() {
                   <Ionicons name="ellipsis-vertical" size={14} color="#fff" />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={s.profilePassCircle}
-                onPress={() => { setShowProfile(false); advanceCard(false); }}
-              >
-                <Ionicons name="close" size={20} color="#FF4D6A" />
-              </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
@@ -697,7 +691,6 @@ const s = StyleSheet.create({
   profileCard: { backgroundColor: '#0A0A0A', borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   profileTopBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, paddingBottom: 10, backgroundColor: 'rgba(26,26,46,0.95)' },
   closeCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  profilePassCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,75,106,0.4)', alignItems: 'center', justifyContent: 'center' },
 
   // Hero photo
   heroWrap: { borderRadius: 16, overflow: 'hidden', marginBottom: 12, position: 'relative' },
