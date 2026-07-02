@@ -4,8 +4,7 @@ import { useFonts } from 'expo-font';
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, HankenGrotesk_700Bold } from '@expo-google-fonts/hanken-grotesk';
-import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
-import { SpeedInsights } from '@vercel/speed-insights/react';
+import { View, Text, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabase';
 import MatchCelebration from '../components/MatchCelebration';
 
@@ -16,8 +15,6 @@ export default function RootLayout() {
   const [incomingMatch, setIncomingMatch] = useState(null);
   const segments = useSegments();
   const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === 'web' && windowWidth >= 700;
 
   useFonts({
     SpaceGrotesk_600SemiBold,
@@ -156,9 +153,8 @@ export default function RootLayout() {
     }
   }, [ready, session, profileComplete, segments]);
 
-  const content = (
+  return (
     <>
-      {Platform.OS === 'web' && <SpeedInsights />}
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
       </Stack>
@@ -184,17 +180,6 @@ export default function RootLayout() {
       />
     </>
   );
-
-  // On a wide desktop browser the app would otherwise stretch edge-to-edge like a
-  // scaled-up phone screen. Below the breakpoint (real phones, narrow browser
-  // windows) this renders `content` directly so mobile is completely untouched.
-  if (!isDesktopWeb) return content;
-
-  return (
-    <View style={s.webOuter}>
-      <View style={s.webFrame}>{content}</View>
-    </View>
-  );
 }
 
 const s = StyleSheet.create({
@@ -202,25 +187,4 @@ const s = StyleSheet.create({
   logoWrap: { width: 68, height: 44, position: 'relative' },
   circle: { position: 'absolute', top: 0, width: 44, height: 44, borderRadius: 22 },
   text: { fontSize: 26, fontWeight: '700', color: '#14161B', letterSpacing: -0.5 },
-  webOuter: {
-    flex: 1,
-    ...Platform.select({ web: { minHeight: '100dvh' } }),
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#e9e9ec',
-  },
-  webFrame: {
-    // Matches 100dvh exactly (not e.g. 92dvh) so screens that size themselves
-    // with `height: '100dvh'` (login/signin) aren't taller than this frame and
-    // don't get clipped by the overflow: hidden below.
-    width: 430,
-    maxWidth: '100%',
-    ...Platform.select({ web: { height: '100dvh' } }),
-    borderRadius: 28,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#000',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 40, shadowOffset: { width: 0, height: 20 },
-    elevation: 20,
-  },
 });
