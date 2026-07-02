@@ -195,6 +195,7 @@ export default function Standouts() {
             return {
               id: p.id, name: p.name ?? 'Unknown', age, verified: !!p.verified,
               photo: Array.isArray(p.photos) ? p.photos[0] : null,
+              photos: Array.isArray(p.photos) ? p.photos : [],
               area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] : 'Mumbai',
               rent: p.budget ?? '₹15k / mo',
               prompt: 'About my flat', answer: 'A great place to call home',
@@ -518,6 +519,16 @@ export default function Standouts() {
                   </TouchableOpacity>
                 </View>
 
+                {/* Flat photos — everything after the profile picture in the photos array */}
+                {profile.photos?.length > 1 && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={s.gallerySectionLabel}>Flat photos</Text>
+                    {profile.photos.slice(1).map((p, i) => (
+                      <Image key={i} source={{ uri: p }} style={s.flatPhoto} resizeMode="cover" />
+                    ))}
+                  </View>
+                )}
+
                 {/* Info grid */}
                 <View style={s.infoGrid}>
                   <View style={s.infoGridTop}>
@@ -767,6 +778,10 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+
+  // Flat photos gallery
+  gallerySectionLabel: { fontFamily: 'SpaceMono_400Regular', fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
+  flatPhoto: { width: '100%', height: 220, borderRadius: 16, marginBottom: 10 },
 
   // Info grid
   infoGrid: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
