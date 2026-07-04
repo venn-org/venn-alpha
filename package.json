@@ -7,6 +7,7 @@
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo-google-fonts/space-mono": "^0.4.2",
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/speed-insights": "^2.0.0",
     "expo": "~54.0.0",
     "expo-font": "~14.0.12",
     "expo-image-picker": "~17.0.11",
