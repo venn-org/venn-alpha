@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getNotifications, markAllRead, markRead } from '../../lib/notifications';
+import { NotifsSkeleton } from '../../components/Skeleton';
 
 const NOTIF_META = {
   match:   { icon: 'heart',              bg: '#FFF0F3', color: '#FF4D6A' },
@@ -125,7 +126,7 @@ export default function Notifications() {
 
       <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         {loading ? (
-          <Text style={s.emptyText}>Loading...</Text>
+          <NotifsSkeleton />
         ) : isEmpty ? (
           <View style={s.empty}>
             <Ionicons name="notifications-outline" size={40} color="#D5D8E0" />

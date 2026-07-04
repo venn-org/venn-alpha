@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ import { colors } from '../../lib/theme';
 import { getBlockedIds } from '../../lib/blocks';
 import { getUnreadCount } from '../../lib/notifications';
 import { isOnline } from '../../lib/presence';
+import { MessagesSkeleton } from '../../components/Skeleton';
 
 function Avatar({ photo, name, size = 52, online = false }) {
   const initials = (name ?? '?')[0].toUpperCase();
@@ -35,11 +37,11 @@ export default function Messages() {
   const [yourTurn, setYourTurn] = useState([]);
   const [theirTurn, setTheirTurn] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
   const hasLoadedOnce = useRef(false);
 
-  useFocusEffect(useCallback(() => {
-    async function load() {
+  const load = useCallback(async () => {
       if (!hasLoadedOnce.current) setLoading(true);
       try {
         const { data: authData } = await supabase.auth.getUser();
@@ -107,9 +109,15 @@ export default function Messages() {
         setLoading(false);
         hasLoadedOnce.current = true;
       }
-    }
-    load();
-  }, []));
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
 
   function openChat(match) {
     router.push({ pathname: '/(tabs)/chat', params: { name: match.name, photo: match.photo ?? '', matchId: match.id ?? '' } });
@@ -127,9 +135,14 @@ export default function Messages() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={s.whiteCard} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView
+        style={s.whiteCard}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 80, flexGrow: 1 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
+      >
         {loading ? (
-          <View style={s.empty}><Text style={s.emptyText}>Loading...</Text></View>
+          <MessagesSkeleton />
         ) : isEmpty ? (
           <View style={s.empty}>
             <Text style={s.emptyTitle}>No matches yet</Text>

@@ -9,6 +9,9 @@ import { colors } from '../../lib/theme';
 export default function EmailOtp() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  // Resend cooldown — a code was just sent to reach this screen, and spamming
+  // resend runs straight into Supabase's rate limit with a cryptic error.
+  const [cooldown, setCooldown] = useState(30);
   const inputs = useRef([]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -24,6 +27,12 @@ export default function EmailOtp() {
       Animated.spring(slideY,  { toValue: 0, friction: 9, tension: 55, useNativeDriver: false }),
     ]).start();
   }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   function shake() {
     shakeX.setValue(0);
@@ -83,12 +92,17 @@ export default function EmailOtp() {
   }
 
   async function handleResend() {
+    if (cooldown > 0) return;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: mode !== 'signin' },
     });
-    if (error) Alert.alert('Error', error.message);
-    else Alert.alert('Code resent', `A new code was sent to ${email}.`);
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setCooldown(30);
+      Alert.alert('Code resent', `A new code was sent to ${email}.`);
+    }
   }
 
   const complete = otp.every(d => d !== '');
@@ -126,8 +140,10 @@ export default function EmailOtp() {
           ))}
         </Animated.View>
 
-        <TouchableOpacity onPress={handleResend}>
-          <Text style={styles.resend}>RESEND CODE</Text>
+        <TouchableOpacity onPress={handleResend} disabled={cooldown > 0}>
+          <Text style={[styles.resend, cooldown > 0 && { color: colors.placeholder }]}>
+            {cooldown > 0 ? `RESEND CODE IN ${cooldown}S` : 'RESEND CODE'}
+          </Text>
         </TouchableOpacity>
       </Animated.View>
 

@@ -193,21 +193,20 @@ export default function Standouts() {
           getBlockedIds(user.id),
         ]);
         if (data && data.length > 0) {
-          const mapped = data.filter(p => !blockedIds.has(p.id)).map(p => {
-            const age = calcAge(p.birthday) ?? 25;
-            return {
-              id: p.id, name: p.name ?? 'Unknown', age, verified: !!p.verified,
-              photo: Array.isArray(p.photos) ? p.photos[0] : null,
-              photos: Array.isArray(p.photos) ? p.photos : [],
-              area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] : 'Mumbai',
-              rent: p.budget ?? '₹15k / mo',
-              prompt: 'About my flat', answer: 'A great place to call home',
-              flatType: p.flat_type ?? '2 BHK · Has flat',
-              occupation: 'Working professional', gender: p.gender ?? '—',
-              food: '—', smoking: '—', moveIn: 'ASAP',
-              extraPrompts: [],
-            };
-          });
+          // Real data only — never fabricate details (rent, occupation,
+          // prompts…) for real people. Rows with no value are hidden instead.
+          const mapped = data.filter(p => !blockedIds.has(p.id)).map(p => ({
+            id: p.id, name: p.name ?? 'Unknown', age: calcAge(p.birthday), verified: !!p.verified,
+            photo: Array.isArray(p.photos) ? p.photos[0] : null,
+            photos: Array.isArray(p.photos) ? p.photos : [],
+            area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] ?? null : null,
+            rent: p.budget ?? null,
+            prompt: null, answer: null,
+            flatType: p.flat_type ?? null,
+            occupation: null, gender: p.gender ?? null,
+            food: null, smoking: null, moveIn: null,
+            extraPrompts: [],
+          }));
           setProfiles(mapped);
         }
       } catch (_) {
@@ -381,9 +380,11 @@ export default function Standouts() {
             <Text style={s.hasFlatText}>Has flat</Text>
           </View>
           {/* Rent badge */}
-          <View style={s.rentBadge}>
-            <Text style={s.rentText}>{profile.rent}</Text>
-          </View>
+          {profile.rent ? (
+            <View style={s.rentBadge}>
+              <Text style={s.rentText}>{profile.rent}</Text>
+            </View>
+          ) : null}
           {/* Overflow menu (report / block) */}
           <TouchableOpacity style={s.cardMenuBtn} onPress={() => setMenuOpen(true)} activeOpacity={0.85}>
             <Ionicons name="ellipsis-vertical" size={15} color="#fff" />
@@ -393,22 +394,26 @@ export default function Standouts() {
           <View style={s.cardBottom}>
             <View style={s.nameRow}>
               <Text style={s.cardName}>{profile.name}</Text>
-              <Text style={s.cardAge}>{profile.age}</Text>
+              {profile.age != null && <Text style={s.cardAge}>{profile.age}</Text>}
               {profile.verified && (
                 <View style={s.verifiedBadge}>
                   <Ionicons name="checkmark" size={10} color="#fff" />
                 </View>
               )}
             </View>
-            <View style={s.areaRow}>
-              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.6)" />
-              <Text style={s.areaText}>{profile.area}</Text>
-            </View>
+            {profile.area ? (
+              <View style={s.areaRow}>
+                <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.6)" />
+                <Text style={s.areaText}>{profile.area}</Text>
+              </View>
+            ) : null}
             {/* Prompt card */}
-            <View style={s.promptCard}>
-              <Text style={s.promptQ}>{profile.prompt}</Text>
-              <Text style={s.promptA}>{profile.answer}</Text>
-            </View>
+            {profile.prompt && profile.answer ? (
+              <View style={s.promptCard}>
+                <Text style={s.promptQ}>{profile.prompt}</Text>
+                <Text style={s.promptA}>{profile.answer}</Text>
+              </View>
+            ) : null}
           </View>
         </Animated.View>
       </View>
@@ -465,7 +470,12 @@ export default function Standouts() {
 
                 {/* Hero photo */}
                 <View style={s.heroWrap}>
-                  <Image source={{ uri: profile.photo }} style={s.heroImg} resizeMode="cover" />
+                  {profile.photo
+                    ? <Image source={{ uri: profile.photo }} style={s.heroImg} resizeMode="cover" />
+                    : <View style={[s.heroImg, { backgroundColor: '#1E1E2E', alignItems: 'center', justifyContent: 'center' }]}>
+                        <Ionicons name="person" size={72} color="rgba(255,255,255,0.15)" />
+                      </View>
+                  }
                   <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.75)']}
                     locations={[0.45, 1]}
@@ -474,7 +484,7 @@ export default function Standouts() {
                   <View style={s.heroInfo}>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
                       <Text style={s.heroName}>{profile.name}</Text>
-                      <Text style={s.heroAge}>{profile.age}</Text>
+                      {profile.age != null && <Text style={s.heroAge}>{profile.age}</Text>}
                       {profile.verified && (
                         <View style={[s.verifiedBadge, { marginBottom: 4 }]}>
                           <Ionicons name="checkmark" size={10} color="#fff" />
@@ -498,10 +508,10 @@ export default function Standouts() {
                 <View style={s.infoGrid}>
                   <View style={s.infoGridTop}>
                     {[
-                      { label: 'AGE', value: String(profile.age), color: '#fff' },
-                      { label: 'AREA', value: profile.area, color: '#fff' },
-                      { label: 'RENT', value: profile.rent, color: '#C4AAFF' },
-                    ].map((cell, i, arr) => (
+                      profile.age != null && { label: 'AGE', value: String(profile.age), color: '#fff' },
+                      profile.area && { label: 'AREA', value: profile.area, color: '#fff' },
+                      profile.rent && { label: 'RENT', value: profile.rent, color: '#C4AAFF' },
+                    ].filter(Boolean).map((cell, i, arr) => (
                       <View
                         key={cell.label}
                         style={[s.infoCell, i < arr.length - 1 && { borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.07)' }]}
@@ -511,10 +521,10 @@ export default function Standouts() {
                       </View>
                     ))}
                   </View>
-                  {DETAIL_ROWS.map((row, i) => (
+                  {DETAIL_ROWS.filter(row => profile[row.key]).map((row, i, arr) => (
                     <View
                       key={row.key}
-                      style={[s.infoRow, i < DETAIL_ROWS.length - 1 && { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' }]}
+                      style={[s.infoRow, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' }]}
                     >
                       <Ionicons name={row.icon} size={18} color="rgba(255,255,255,0.45)" />
                       <Text style={s.infoRowLabel}>{row.label}</Text>
@@ -524,10 +534,12 @@ export default function Standouts() {
                 </View>
 
                 {/* Main prompt */}
-                <View style={s.profilePromptWrap}>
-                  <Text style={s.profilePromptQ}>{profile.prompt}</Text>
-                  <Text style={s.profilePromptA}>"{profile.answer}"</Text>
-                </View>
+                {profile.prompt && profile.answer ? (
+                  <View style={s.profilePromptWrap}>
+                    <Text style={s.profilePromptQ}>{profile.prompt}</Text>
+                    <Text style={s.profilePromptA}>"{profile.answer}"</Text>
+                  </View>
+                ) : null}
 
                 {/* Extra prompts */}
                 {profile.extraPrompts.map(ep => (

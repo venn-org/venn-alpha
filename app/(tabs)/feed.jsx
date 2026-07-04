@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Image, Modal, Pressable, Dimensions, TextInput, Animated, Alert,
+  RefreshControl,
 } from 'react-native';
 
 const SCREEN_H = Dimensions.get('window').height;
@@ -15,6 +16,7 @@ import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
+import { FeedSkeleton } from '../../components/Skeleton';
 import PreferencesSheet, {
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
   getPrefDisplay, isPrefSet, savePrefsToSupabase,
@@ -605,6 +607,7 @@ export default function Feed() {
   const [idx, setIdx] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const [quickFilter, setQuickFilter] = useState(null);
   const [prefs, setPrefs] = useState(INIT_PREFS);
@@ -625,18 +628,28 @@ export default function Feed() {
 
   useEffect(() => { prefsRef.current = prefs; }, [prefs]);
 
+  // Score, tag with a visible overlap %, and sort. The overlap pill only
+  // shows once the user has set at least one preference — before that every
+  // profile scores 100 and the number would be meaningless.
+  function buildDeck(list, prefsObj) {
+    const anySet = Object.values(prefsObj).some(v => Array.isArray(v) ? v.length > 0 : !!v);
+    return list
+      .filter(p => !likedIdsRef.current.has(p.id))
+      .map(p => {
+        const score = scoreProfile(p, prefsObj);
+        return { ...p, _score: score, overlap: anySet ? score : null };
+      })
+      .sort((a, b) => b._score - a._score);
+  }
+
   // Rebuild the deck from the raw list with new preferences — without this,
   // the filter chips and preferences sheet only changed state/DB and the
   // visible feed kept its original order until a full app reload.
   function applyPrefsToDeck(nextPrefs) {
     const raw = rawProfilesRef.current;
     if (!raw) return; // still on the demo deck — nothing real to re-score
-    const scored = raw
-      .filter(p => !likedIdsRef.current.has(p.id))
-      .map(p => ({ ...p, _score: scoreProfile(p, nextPrefs) }))
-      .sort((a, b) => b._score - a._score);
     skippedRef.current = [];
-    setProfiles(scored);
+    setProfiles(buildDeck(raw, nextPrefs));
     setIdx(0);
   }
 
@@ -798,8 +811,7 @@ export default function Feed() {
     reloadPrefs();
   }, []));
 
-  useEffect(() => {
-    async function load() {
+  async function loadFeed() {
       try {
         const { data: authData } = await supabase.auth.getUser();
         const uid = authData?.user?.id ?? '';
@@ -849,19 +861,24 @@ export default function Feed() {
         if (data && data.length > 0) {
           const normed = data.filter(p => !blockedIds.has(p.id)).map(normaliseProfile);
           rawProfilesRef.current = normed;
-          const scored = normed
-            .map(p => ({ ...p, _score: scoreProfile(p, currentPrefs) }))
-            .sort((a, b) => b._score - a._score);
-          setProfiles(scored);
+          skippedRef.current = [];
+          setProfiles(buildDeck(normed, currentPrefs));
+          setIdx(0);
         }
       } catch (_) {
-        // keep demo profiles
+        // keep whatever deck is already showing
       } finally {
         setLoading(false);
       }
-    }
-    load();
-  }, []);
+  }
+
+  useEffect(() => { loadFeed(); }, []);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadFeed();
+    setRefreshing(false);
+  }
 
   return (
     <View style={[s.screen, { paddingTop: insets.top + 12 }]}>
@@ -926,15 +943,14 @@ export default function Feed() {
 
       {/* Feed */}
       {loading ? (
-        <View style={s.empty}>
-          <Text style={s.emptyText}>Loading...</Text>
-        </View>
+        <FeedSkeleton />
       ) : profile ? (
         <View style={{ flex: 1 }}>
           <ScrollView
             key={profile.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={s.feedContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
           >
             {!bannerDismissed && (
               <View style={s.banner}>
@@ -977,9 +993,16 @@ export default function Feed() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={s.empty}>
+        <ScrollView
+          contentContainerStyle={[s.empty, { flexGrow: 1, gap: 16 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
+        >
           <Text style={s.emptyText}>No profiles yet — check back soon!</Text>
-        </View>
+          {/* Pull-to-refresh doesn't exist on mobile web, so give an explicit button too. */}
+          <TouchableOpacity style={s.refreshBtn} onPress={onRefresh} activeOpacity={0.85} disabled={refreshing}>
+            <Text style={s.refreshBtnText}>{refreshing ? 'Checking…' : 'Refresh'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
 
       {/* Full preferences sheet (≡ icon) */}
@@ -1136,6 +1159,8 @@ const s = StyleSheet.create({
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 14, color: colors.slate },
+  refreshBtn: { backgroundColor: colors.ink, borderRadius: 50, paddingHorizontal: 26, paddingVertical: 12 },
+  refreshBtnText: { fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 14, color: '#fff' },
 
   // Card
   cardOuter: { backgroundColor: '#F2F3F7' },

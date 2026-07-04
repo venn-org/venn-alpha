@@ -13,6 +13,7 @@ import { activeStatusText } from '../../lib/presence';
 import { blockUser } from '../../lib/blocks';
 import { unmatchUser } from '../../lib/matches';
 import ReportSheet from '../../components/ReportSheet';
+import { ChatSkeleton } from '../../components/Skeleton';
 
 const PAGE_SIZE = 30;
 
@@ -404,7 +405,7 @@ export default function Chat() {
             </TouchableOpacity>
           )}
           {loadingMsgs ? (
-            <Text style={s.emptyText}>Loading…</Text>
+            <ChatSkeleton />
           ) : messages.length === 0 ? (
             <Text style={s.emptyText}>Say hi to {displayName} 👋</Text>
           ) : messages.map(msg => (

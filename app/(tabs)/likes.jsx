@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Modal, Pressable, Image, Dimensions, Animated, Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { calcAge } from '../../lib/age';
 import PreferencesSheet, { INIT_PREFS, savePrefsToSupabase } from '../../components/PreferencesSheet';
 import MatchCelebration from '../../components/MatchCelebration';
 import ReportSheet from '../../components/ReportSheet';
+import { LikesSkeleton } from '../../components/Skeleton';
 
 const { width: W } = Dimensions.get('window');
 const CARD_W = (W - 48) / 2;
@@ -233,6 +235,7 @@ export default function Likes() {
   const router = useRouter();
   const [likes, setLikes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState(null);
   const [showBoost, setShowBoost] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
@@ -241,38 +244,9 @@ export default function Likes() {
   const [reportTarget, setReportTarget] = useState(null);
   const gridFade = useRef(new Animated.Value(0)).current;
 
-  useFocusEffect(useCallback(() => {
-    async function reloadPrefs() {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
-      if (!uid) return;
-      const { data: me } = await supabase
-        .from('profiles')
-        .select('pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
-        .eq('id', uid)
-        .single();
-      if (me) {
-        setPrefs({
-          role:       me.pref_role       ?? null,
-          areas:      me.pref_areas      ?? [],
-          flatType:   me.pref_flat_type  ?? [],
-          budget:     me.pref_budget     ?? null,
-          moveIn:     me.pref_move_in    ?? null,
-          gender:     me.pref_gender     ?? null,
-          age:        me.pref_age        ?? null,
-          occupation: me.pref_occupation ?? [],
-          food:       me.pref_food       ?? [],
-          smoking:    me.pref_smoking    ?? null,
-          drinking:   me.pref_drinking   ?? null,
-          pets:       me.pref_pets       ?? [],
-        });
-      }
-    }
-    reloadPrefs();
-  }, []));
-
-  useEffect(() => {
-    async function load() {
+  // Loads likes + prefs together; runs on every focus (below) so new likes
+  // appear when switching to this tab, making a separate prefs reload redundant.
+  const loadLikes = useCallback(async () => {
       try {
         const { data: authData } = await supabase.auth.getUser();
         const uid = authData?.user?.id;
@@ -320,9 +294,16 @@ export default function Likes() {
         setLoading(false);
         Animated.timing(gridFade, { toValue: 1, duration: 350, useNativeDriver: false }).start();
       }
-    }
-    load();
   }, []);
+
+  // Refetch on every focus so newly received likes show up on tab switch.
+  useFocusEffect(useCallback(() => { loadLikes(); }, [loadLikes]));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadLikes();
+    setRefreshing(false);
+  }
 
   async function handleSavePrefs(draft) {
     setPrefs(draft);
@@ -377,9 +358,13 @@ export default function Likes() {
       </View>
 
       {loading ? (
-        <View style={s.center}><Text style={s.grayText}>Loading...</Text></View>
+        <LikesSkeleton />
       ) : likes.length === 0 ? (
-        <View style={s.center}>
+        <ScrollView
+          contentContainerStyle={[s.center, { flexGrow: 1 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
+        >
+          <EmptyIllustration />
           <Text style={s.emptyTitle}>{"Have patience —\nsomeone's checking you out"}</Text>
           <Text style={s.emptySub}>Your profile is out there. When someone likes you, they'll show up here.</Text>
           {!Object.values(prefs).some(v => Array.isArray(v) ? v.length > 0 : !!v) && (
@@ -387,10 +372,14 @@ export default function Likes() {
               <Text style={s.setPrefText}>Set preferences</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </ScrollView>
       ) : (
         <Animated.View style={{ flex: 1, opacity: gridFade }}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.grid}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.grid}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
+          >
             {likes.map((like, i) => (
               <LikeCard key={like.id} like={like} onPress={() => setSelected(i)} />
             ))}
