@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
+import { getPausedIds } from '../../lib/paused';
 import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
 import { FeedSkeleton } from '../../components/Skeleton';
@@ -257,23 +258,69 @@ function normaliseProfile(p) {
     education_level: p.education_level ?? null,
     flatPhoto: null, flatLabel: null,
     prompts: Array.isArray(p.prompts) ? p.prompts : [],
+    drink: p.drink ?? null,
+    tobacco: p.tobacco ?? null,
   };
 }
 
+// Parses "₹10k–20k", "Under ₹10k", "₹50k+", "18–22", "35+" into [min, max].
+function parseRange(s) {
+  if (!s) return null;
+  const nums = (String(s).match(/\d+/g) || []).map(Number);
+  if (nums.length === 0) return null;
+  if (/under/i.test(s)) return [0, nums[0]];
+  if (s.includes('+')) return [nums[0], Infinity];
+  if (nums.length >= 2) return [nums[0], nums[1]];
+  return [nums[0], nums[0]];
+}
+
+// Scores against every preference that has profile-side data to compare
+// with: areas, gender, budget, age, smoking, drinking. (Food, pets, move-in,
+// flat type, and occupation have no counterpart on profiles yet.) Unknowns
+// on the profile side count as compatible so incomplete profiles aren't
+// buried, and "open to all" options don't count against anyone.
 function scoreProfile(profile, prefs) {
   let matched = 0, total = 0;
+
   if (prefs.areas && prefs.areas.length > 0) {
     total++;
     if (profile.preferred_areas.some(a => prefs.areas.includes(a))) matched++;
   }
-  if (prefs.gender) {
+
+  // Pref values look like "👩 Women only" / "👨 Men only" / "🌈 Any gender";
+  // profile.gender is "Woman" / "Man" / "Non-binary" / "Prefer not to say".
+  if (prefs.gender && !prefs.gender.includes('Any')) {
     total++;
-    if (!profile.gender || profile.gender === prefs.gender) matched++;
+    const want = prefs.gender.includes('Women') ? 'Woman' : prefs.gender.includes('Men') ? 'Man' : null;
+    if (!want || !profile.gender || profile.gender === want) matched++;
   }
-  if (prefs.budget && profile.budget) {
+
+  // Budget enums differ across screens ("Under ₹10k" vs "₹5k–10k"), so
+  // compare numeric ranges for overlap instead of exact strings.
+  if (prefs.budget) {
     total++;
-    if (prefs.budget === profile.budget) matched++;
+    const a = parseRange(prefs.budget);
+    const b = parseRange(profile.budget);
+    if (!a || !b || (a[0] <= b[1] && b[0] <= a[1])) matched++;
   }
+
+  if (prefs.age && prefs.age !== 'Flexible') {
+    total++;
+    const r = parseRange(prefs.age);
+    if (!r || profile.age == null || (profile.age >= r[0] && profile.age <= r[1])) matched++;
+  }
+
+  // Only the strict options actually exclude anyone — "Smoker ok",
+  // "Outside only", and "fine with drinking" mean fine either way.
+  if (prefs.smoking && prefs.smoking.includes('Non-smoker')) {
+    total++;
+    if (!profile.tobacco || profile.tobacco === 'No' || profile.tobacco === 'Prefer not to say') matched++;
+  }
+  if (prefs.drinking && prefs.drinking.includes('Teetotaller')) {
+    total++;
+    if (!profile.drink || profile.drink === 'No' || profile.drink === 'Prefer not to say') matched++;
+  }
+
   if (total === 0) return 100;
   return Math.round((matched / total) * 100);
 }
@@ -848,18 +895,19 @@ export default function Feed() {
           if (anySet) setBannerDismissed(true);
         }
 
-        const [{ data }, blockedIds] = await Promise.all([
+        const [{ data }, blockedIds, pausedIds] = await Promise.all([
           supabase
             .from('profiles')
-            .select('id, name, birthday, gender, pronouns, verified, preferred_areas, budget, photos, prompts, job_title, job_company, education_school, education_level')
+            .select('id, name, birthday, gender, pronouns, verified, preferred_areas, budget, photos, prompts, job_title, job_company, education_school, education_level, drink, tobacco')
             .neq('id', uid)
             .eq('onboarding_done', true)
             .eq('user_type', 'seeking')
             .limit(100),
           getBlockedIds(uid),
+          getPausedIds(),
         ]);
         if (data && data.length > 0) {
-          const normed = data.filter(p => !blockedIds.has(p.id)).map(normaliseProfile);
+          const normed = data.filter(p => !blockedIds.has(p.id) && !pausedIds.has(p.id)).map(normaliseProfile);
           rawProfilesRef.current = normed;
           skippedRef.current = [];
           setProfiles(buildDeck(normed, currentPrefs));

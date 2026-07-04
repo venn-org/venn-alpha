@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
+import { getPausedIds } from '../../lib/paused';
 import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
 
@@ -182,7 +183,7 @@ export default function Standouts() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const [{ data }, blockedIds] = await Promise.all([
+        const [{ data }, blockedIds, pausedIds] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, name, birthday, gender, verified, preferred_areas, budget, flat_type, photos')
@@ -191,11 +192,12 @@ export default function Standouts() {
             .eq('user_type', 'owner')
             .limit(20),
           getBlockedIds(user.id),
+          getPausedIds(),
         ]);
         if (data && data.length > 0) {
           // Real data only — never fabricate details (rent, occupation,
           // prompts…) for real people. Rows with no value are hidden instead.
-          const mapped = data.filter(p => !blockedIds.has(p.id)).map(p => ({
+          const mapped = data.filter(p => !blockedIds.has(p.id) && !pausedIds.has(p.id)).map(p => ({
             id: p.id, name: p.name ?? 'Unknown', age: calcAge(p.birthday), verified: !!p.verified,
             photo: Array.isArray(p.photos) ? p.photos[0] : null,
             photos: Array.isArray(p.photos) ? p.photos : [],

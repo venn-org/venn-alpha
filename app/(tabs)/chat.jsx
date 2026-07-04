@@ -13,6 +13,7 @@ import { activeStatusText } from '../../lib/presence';
 import { blockUser } from '../../lib/blocks';
 import { unmatchUser } from '../../lib/matches';
 import ReportSheet from '../../components/ReportSheet';
+import ProfileViewSheet from '../../components/ProfileViewSheet';
 import { ChatSkeleton } from '../../components/Skeleton';
 
 const PAGE_SIZE = 30;
@@ -43,6 +44,8 @@ export default function Chat() {
   const [otherTyping, setOtherTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [otherProfile, setOtherProfile] = useState(null);
+  const [profileVisible, setProfileVisible] = useState(false);
   const scrollRef = useRef(null);
   const displayName = name ?? 'Chat';
   const sendScale = useRef(new Animated.Value(1)).current;
@@ -91,9 +94,14 @@ export default function Chat() {
         if (matchRow) {
           otherId = matchRow.user1_id === uid ? matchRow.user2_id : matchRow.user1_id;
           otherIdRef.current = otherId;
-          const { data: otherProfile } = await supabase
-            .from('profiles').select('last_active_at').eq('id', otherId).single();
-          otherLastActiveRef.current = otherProfile?.last_active_at ?? null;
+          // Full profile, not just presence — the header tap re-opens the
+          // profile you matched with (photos, budget, areas, prompts).
+          const { data: other } = await supabase
+            .from('profiles')
+            .select('id, name, birthday, gender, photos, preferred_areas, budget, prompts, job_title, job_company, education_school, education_level, last_active_at')
+            .eq('id', otherId).single();
+          otherLastActiveRef.current = other?.last_active_at ?? null;
+          setOtherProfile(other ?? null);
           setOtherStatus(activeStatusText(otherLastActiveRef.current));
         }
 
@@ -326,7 +334,11 @@ export default function Chat() {
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="chevron-back" size={20} color={colors.ink} />
           </TouchableOpacity>
-          <View style={s.headerCenter}>
+          <TouchableOpacity
+            style={s.headerCenter}
+            onPress={() => otherProfile && setProfileVisible(true)}
+            activeOpacity={0.7}
+          >
             <View style={s.headerAvatar}>
               {photo
                 ? <Image source={{ uri: photo }} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="cover" />
@@ -343,7 +355,7 @@ export default function Chat() {
                 </Text>
               ) : null}
             </View>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity style={s.moreBtn} activeOpacity={0.7} onPress={() => setMenuOpen(true)}>
             <Ionicons name="ellipsis-vertical" size={18} color={colors.ink} />
           </TouchableOpacity>
@@ -352,6 +364,11 @@ export default function Chat() {
         <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
           <Pressable style={[s.menuBackdrop, { paddingTop: insets.top + 60 }]} onPress={() => setMenuOpen(false)}>
             <View style={s.menuBox}>
+              <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); if (otherProfile) setProfileVisible(true); }}>
+                <Ionicons name="person-circle-outline" size={16} color={colors.ink} />
+                <Text style={s.menuItemText}>View profile</Text>
+              </TouchableOpacity>
+              <View style={s.menuDivider} />
               <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); confirmUnmatch(); }}>
                 <Ionicons name="heart-dislike-outline" size={16} color={colors.ink} />
                 <Text style={s.menuItemText}>Unmatch</Text>
@@ -387,6 +404,12 @@ export default function Chat() {
           targetName={displayName}
           onClose={() => setReportVisible(false)}
           onSubmitted={() => Alert.alert('Report submitted', "Thanks — we'll review it.")}
+        />
+
+        <ProfileViewSheet
+          visible={profileVisible}
+          profile={otherProfile}
+          onClose={() => setProfileVisible(false)}
         />
 
         <ScrollView

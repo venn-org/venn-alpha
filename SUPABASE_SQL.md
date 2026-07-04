@@ -485,3 +485,42 @@ CREATE POLICY "messages_insert" ON messages
     )
   );
 ```
+
+---
+
+## 17. Pause profile + delete account
+
+Pause hides a user from the feed and Standouts while keeping their matches
+and chats intact (the app filters paused ids client-side and fails open, so
+nothing breaks if this hasn't run yet — the toggle just errors when flipped):
+
+```sql
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false;
+```
+
+Account deletion has to touch `auth.users`, which the client's anon key can
+never do — so it goes through a `SECURITY DEFINER` function the app calls with
+`supabase.rpc('delete_account')`. Every table in this file references
+`auth.users(id) ON DELETE CASCADE` (likes, matches → messages, notifications,
+reports, blocks), so deleting the auth user cleans up everything; the explicit
+`profiles` delete is belt-and-braces in case that FK was created without a
+cascade.
+
+```sql
+CREATE OR REPLACE FUNCTION delete_account()
+RETURNS void AS $$
+BEGIN
+  -- Remove uploaded photo objects so they're unreachable immediately.
+  -- (The underlying files can be garbage-collected from the dashboard later.)
+  DELETE FROM storage.objects
+    WHERE bucket_id = 'photos'
+      AND (storage.foldername(name))[1] = auth.uid()::text;
+  DELETE FROM public.profiles WHERE id = auth.uid();
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION delete_account() FROM anon, public;
+GRANT EXECUTE ON FUNCTION delete_account() TO authenticated;
+```

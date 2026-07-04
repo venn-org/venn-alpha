@@ -1032,6 +1032,7 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState(null);
+  const [paused, setPaused] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [commentFilter, setCommentFilter] = useState(true);
   const [uploadingIndex, setUploadingIndex] = useState(null);
@@ -1096,10 +1097,45 @@ export default function Profile() {
           .eq('id', uid)
           .single();
         if (data) setProfile(data);
+        // Fetched separately and fail-soft so the profile screen still works
+        // before the `paused` column exists (SUPABASE_SQL.md #17).
+        const { data: flag, error: pausedErr } = await supabase
+          .from('profiles').select('paused').eq('id', uid).single();
+        if (!pausedErr) setPaused(!!flag?.paused);
       } catch (_) {}
     }
     load();
   }, []);
+
+  async function togglePause(next) {
+    setPaused(next);
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase.from('profiles').update({ paused: next }).eq('id', uid);
+    if (error) {
+      setPaused(!next);
+      Alert.alert('Could not update', error.message);
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your profile, photos, matches, and messages. It cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete forever', style: 'destructive', onPress: deleteAccount },
+      ],
+    );
+  }
+
+  async function deleteAccount() {
+    const { error } = await supabase.rpc('delete_account');
+    if (error) { Alert.alert('Could not delete account', error.message); return; }
+    // The user no longer exists server-side; clear the local session to land on login.
+    supabase.auth.signOut();
+  }
 
   async function pickPhoto(index) {
     if (uploadingIndex !== null) return; // avoid concurrent picks racing on the same profile.photos snapshot
@@ -1507,15 +1543,40 @@ export default function Profile() {
             <View style={{ width: 40, height: 4, backgroundColor: '#E6E8EE', borderRadius: 2, alignSelf: 'center', marginTop: 16, marginBottom: 20 }} />
             <Text style={{ fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18, color: '#14161B', paddingHorizontal: 20, marginBottom: 16 }}>Settings</Text>
 
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 12 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: '#EEF1FF', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="pause-outline" size={18} color={colors.blue} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: colors.ink }}>Pause my profile</Text>
+                <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#9AA0B2', marginTop: 1 }}>Hidden from the feed — matches and chats stay</Text>
+              </View>
+              <Switch value={paused} onValueChange={togglePause} trackColor={{ false: '#E6E8EE', true: colors.blue }} thumbColor="#fff" />
+            </View>
+
             <TouchableOpacity
               onPress={() => { animateSettingsClose(); setTimeout(handleLogout, 250); }}
               activeOpacity={0.7}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 16 }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 12 }}
+            >
+              <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="log-out-outline" size={18} color={colors.ink} />
+              </View>
+              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: colors.ink }}>Log out</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => { animateSettingsClose(); setTimeout(confirmDeleteAccount, 250); }}
+              activeOpacity={0.7}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 12 }}
             >
               <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: '#FFF0F3', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="log-out-outline" size={18} color="#FF4D6A" />
+                <Ionicons name="trash-outline" size={18} color="#FF4D6A" />
               </View>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: '#FF4D6A' }}>Log out</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: '#FF4D6A' }}>Delete account</Text>
+                <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#9AA0B2', marginTop: 1 }}>Permanently removes your profile, matches, and messages</Text>
+              </View>
             </TouchableOpacity>
           </Animated.View>
         </View>
