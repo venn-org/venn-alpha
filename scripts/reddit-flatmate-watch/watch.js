@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Finds Reddit posts about flatmates/roommates and drafts a reply for manual review.
-// It never posts anything itself — output is a Markdown file you read, edit, and post by hand.
+// It never posts anything itself — matches + drafts are written to data/matches.json,
+// which the dashboard (dashboard/index.html) reads directly from GitHub.
 
 const fs = require("fs");
 const path = require("path");
 
 const DIR = __dirname;
 const CONFIG_PATH = path.join(DIR, "config.json");
-const SEEN_PATH = path.join(DIR, "state", "seen.json");
-const DRAFTS_DIR = path.join(DIR, "drafts");
+const MATCHES_PATH = path.join(DIR, "data", "matches.json");
 const USER_AGENT = "venn-flatmate-watch/1.0 (manual-review script; contact via repo owner)";
 
 function loadJson(filePath, fallback) {
@@ -47,59 +47,43 @@ async function main() {
     process.exit(1);
   }
 
-  const seenState = loadJson(SEEN_PATH, { seenPostIds: [] });
-  const seenIds = new Set(seenState.seenPostIds);
+  const existing = loadJson(MATCHES_PATH, []);
+  const existingIds = new Set(existing.map((m) => m.id));
 
-  const matches = [];
+  const newMatches = [];
 
   for (const subreddit of config.subreddits) {
     console.log(`Checking r/${subreddit}...`);
     const posts = await fetchNewPosts(subreddit, config.postLimit ?? 25);
 
     for (const post of posts) {
-      if (seenIds.has(post.id)) continue;
+      if (existingIds.has(post.id)) continue;
       const haystack = `${post.title ?? ""} ${post.selftext ?? ""}`;
       if (!matchesKeywords(haystack, config.keywords)) continue;
 
-      seenIds.add(post.id);
-      matches.push({
-        subreddit,
+      existingIds.add(post.id);
+      newMatches.push({
         id: post.id,
+        subreddit,
         title: post.title,
         permalink: `https://www.reddit.com${post.permalink}`,
         author: post.author,
         createdUtc: post.created_utc,
         draft: draftComment(config, post),
+        foundAt: new Date().toISOString(),
       });
     }
   }
 
-  seenState.seenPostIds = Array.from(seenIds);
-  fs.writeFileSync(SEEN_PATH, JSON.stringify(seenState, null, 2));
-
-  if (matches.length === 0) {
+  if (newMatches.length === 0) {
     console.log("No new matching posts found.");
     return;
   }
 
-  fs.mkdirSync(DRAFTS_DIR, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outPath = path.join(DRAFTS_DIR, `${stamp}.md`);
-
-  const lines = [`# Reddit flatmate matches — ${new Date().toISOString()}`, ""];
-  for (const m of matches) {
-    lines.push(`## r/${m.subreddit} — ${m.title}`);
-    lines.push(`- Link: ${m.permalink}`);
-    lines.push(`- Author: u/${m.author}`);
-    lines.push("");
-    lines.push("**Draft reply (edit before posting):**");
-    lines.push("");
-    lines.push("> " + m.draft);
-    lines.push("");
-  }
-
-  fs.writeFileSync(outPath, lines.join("\n"));
-  console.log(`\nFound ${matches.length} new post(s). Drafts written to:\n${outPath}`);
+  const combined = [...newMatches, ...existing].sort((a, b) => b.createdUtc - a.createdUtc);
+  fs.mkdirSync(path.dirname(MATCHES_PATH), { recursive: true });
+  fs.writeFileSync(MATCHES_PATH, JSON.stringify(combined, null, 2));
+  console.log(`\nFound ${newMatches.length} new post(s). Total tracked: ${combined.length}.`);
 }
 
 main().catch((err) => {
