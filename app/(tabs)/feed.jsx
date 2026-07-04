@@ -615,6 +615,28 @@ export default function Feed() {
   const myInfoRef = useRef({ name: null, photo: null });
   const skippedRef = useRef([]);
   const savingPrefsRef = useRef(false);
+  // Normalized real profiles from the DB (null until loaded — demo deck in
+  // the meantime), kept so the deck can be re-scored when filters change.
+  const rawProfilesRef = useRef(null);
+  const likedIdsRef = useRef(new Set());
+  const prefsRef = useRef(INIT_PREFS);
+
+  useEffect(() => { prefsRef.current = prefs; }, [prefs]);
+
+  // Rebuild the deck from the raw list with new preferences — without this,
+  // the filter chips and preferences sheet only changed state/DB and the
+  // visible feed kept its original order until a full app reload.
+  function applyPrefsToDeck(nextPrefs) {
+    const raw = rawProfilesRef.current;
+    if (!raw) return; // still on the demo deck — nothing real to re-score
+    const scored = raw
+      .filter(p => !likedIdsRef.current.has(p.id))
+      .map(p => ({ ...p, _score: scoreProfile(p, nextPrefs) }))
+      .sort((a, b) => b._score - a._score);
+    skippedRef.current = [];
+    setProfiles(scored);
+    setIdx(0);
+  }
 
   const profile = profiles[idx] ?? null;
   const canBack = idx > 0;
@@ -648,6 +670,9 @@ export default function Feed() {
     setProfiles(filtered);
     setIdx(i => Math.min(i, Math.max(0, filtered.length - 1)));
     skippedRef.current = skippedRef.current.filter(x => x.id !== p.id);
+    if (rawProfilesRef.current) {
+      rawProfilesRef.current = rawProfilesRef.current.filter(x => x.id !== p.id);
+    }
     if (!p?.id || p._demo) return;
     const uid = uidRef.current;
     if (!uid) return;
@@ -675,6 +700,8 @@ export default function Feed() {
       const { error: likeError } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: p.id, comment: likeComment.trim() || null });
       // Already liked (unique constraint) — fall through to the match check below.
       if (likeError && likeError.code !== '23505') { Alert.alert('Could not send like', likeError.message); return; }
+      // Keep liked profiles out of the deck when filters rebuild it.
+      likedIdsRef.current.add(p.id);
       // Requires a DB trigger: when both users have liked each other, insert a row
       // into matches(user1_id, user2_id) where user1_id < user2_id.
       const u1 = uid < p.id ? uid : p.id;
@@ -688,12 +715,16 @@ export default function Feed() {
       }
     } catch (e) {
       Alert.alert('Could not send like', e.message);
+    } finally {
+      // Must be in finally: the early returns above (no uid / insert error)
+      // used to skip this, leaving the like button disabled until reload.
+      setLikeSending(false);
     }
-    setLikeSending(false);
   }
 
   async function handleSavePrefs(draft) {
     setPrefs(draft);
+    applyPrefsToDeck(draft);
     setBannerDismissed(true);
     setShowPrefs(false);
     savingPrefsRef.current = true;
@@ -709,6 +740,7 @@ export default function Feed() {
   function handleQuickSave(key, val) {
     const updated = { ...prefs, [key]: val };
     setPrefs(updated);
+    applyPrefsToDeck(updated);
     setBannerDismissed(true);
     savingPrefsRef.current = true;
     savePrefsToSupabase(updated)
@@ -738,7 +770,7 @@ export default function Feed() {
       // a quick-focus-away-and-back can overwrite the just-applied local prefs
       // with the not-yet-updated DB row.
       if (me && !savingPrefsRef.current) {
-        setPrefs({
+        const next = {
           role:       me.pref_role       ?? null,
           areas:      me.pref_areas      ?? [],
           flatType:   me.pref_flat_type  ?? [],
@@ -751,7 +783,14 @@ export default function Feed() {
           smoking:    me.pref_smoking    ?? null,
           drinking:   me.pref_drinking   ?? null,
           pets:       me.pref_pets       ?? [],
-        });
+        };
+        // Only touch state (and rebuild the deck) when prefs actually changed —
+        // e.g. saved from the Likes screen. A plain tab switch must not reset
+        // the user's position in the deck.
+        if (JSON.stringify(next) !== JSON.stringify(prefsRef.current)) {
+          setPrefs(next);
+          applyPrefsToDeck(next);
+        }
       }
     }
     reloadPrefs();
@@ -807,6 +846,7 @@ export default function Feed() {
         ]);
         if (data && data.length > 0) {
           const normed = data.filter(p => !blockedIds.has(p.id)).map(normaliseProfile);
+          rawProfilesRef.current = normed;
           const scored = normed
             .map(p => ({ ...p, _score: scoreProfile(p, currentPrefs) }))
             .sort((a, b) => b._score - a._score);

@@ -1168,14 +1168,10 @@ export default function Profile() {
   }
 
   function handleLogout() {
-    if (Platform.OS === 'web') {
-      supabase.auth.signOut();
-    } else {
-      Alert.alert('Log out', 'Are you sure you want to log out?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
-      ]);
-    }
+    Alert.alert('Log out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+    ]);
   }
 
   const name = profile?.name ?? 'You';

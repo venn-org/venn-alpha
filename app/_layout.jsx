@@ -1,10 +1,12 @@
+import '../lib/alert'; // patches react-native-web's no-op Alert.alert — must load before any screen
 import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, HankenGrotesk_700Bold } from '@expo-google-fonts/hanken-grotesk';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { supabase } from '../lib/supabase';
 import MatchCelebration from '../components/MatchCelebration';
 
@@ -155,6 +157,7 @@ export default function RootLayout() {
 
   return (
     <>
+      {Platform.OS === 'web' && <SpeedInsights />}
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
       </Stack>
