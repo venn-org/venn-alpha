@@ -599,7 +599,9 @@ function ProfileCard({ profile, onBack, canBack, onSkip, onLike, onBlock, onRepo
 export default function Feed() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [profiles, setProfiles] = useState(DEMO);
+  // Demo profiles are a dev-only preview deck; in production an empty feed
+  // shows the honest "no profiles yet" state instead of fake people.
+  const [profiles, setProfiles] = useState(__DEV__ ? DEMO : []);
   const [idx, setIdx] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [loading, setLoading] = useState(true);

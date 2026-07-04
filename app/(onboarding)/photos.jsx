@@ -91,16 +91,23 @@ export default function Photos() {
   }
 
   async function handleContinue() {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
-      if (uid) {
-        const photos = isOwner
-          ? [profilePhoto, ...flatPhotos].filter(Boolean)
-          : [profilePhoto, ...extraPhotos].filter(Boolean);
-        await supabase.from('profiles').update({ photos }).eq('id', uid);
+    const photos = isOwner
+      ? [profilePhoto, ...flatPhotos].filter(Boolean)
+      : [profilePhoto, ...extraPhotos].filter(Boolean);
+    if (photos.length > 0) {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        if (uid) {
+          const { error } = await supabase.from('profiles').update({ photos }).eq('id', uid);
+          if (error) throw error;
+        }
+      } catch (e) {
+        // Don't advance pretending the photos were saved.
+        Alert.alert('Could not save photos', e.message);
+        return;
       }
-    } catch (_) {}
+    }
     router.push('/(onboarding)/notifications');
   }
 
@@ -208,7 +215,9 @@ export default function Photos() {
           <Text style={styles.btnText}>Continue</Text>
         </TouchableOpacity>
         {!isOwner && (
-          <TouchableOpacity onPress={() => router.push('/(onboarding)/notifications')}>
+          // Goes through handleContinue so a photo that was already uploaded
+          // still gets saved to the profile instead of being discarded.
+          <TouchableOpacity onPress={handleContinue} disabled={uploading}>
             <Text style={styles.skip}>Skip for now</Text>
           </TouchableOpacity>
         )}

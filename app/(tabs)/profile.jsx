@@ -1129,8 +1129,11 @@ export default function Profile() {
       const url = supabase.storage.from('photos').getPublicUrl(path).data.publicUrl;
       const current = Array.isArray(profile?.photos) ? [...profile.photos] : [];
       current[index] = url;
-      await supabase.from('profiles').update({ photos: current }).eq('id', uid);
-      setProfile(prev => ({ ...prev, photos: current }));
+      // Compact holes: writing to slot N of a shorter array creates nulls in
+      // the jsonb, and photos[0] is read as the avatar all over the app.
+      const compacted = current.filter(Boolean);
+      await supabase.from('profiles').update({ photos: compacted }).eq('id', uid);
+      setProfile(prev => ({ ...prev, photos: compacted }));
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {

@@ -25,6 +25,7 @@ export default function Lifestyle() {
   }
 
   async function handleNext() {
+    if (!allAnswered) return; // the arrow renders grey until every question is answered
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({
@@ -65,6 +66,7 @@ export default function Lifestyle() {
           <TouchableOpacity
             style={styles.nextBtn}
             onPress={handleNext}
+            disabled={!allAnswered}
             activeOpacity={0.85}
           >
             <LinearGradient colors={allAnswered ? [colors.blue, colors.violet] : ['#C8CAD2', '#C8CAD2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.nextGrad}>

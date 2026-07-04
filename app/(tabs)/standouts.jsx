@@ -170,7 +170,9 @@ export default function Standouts() {
     ]).start(() => setShowKeysInfo(false));
   }
 
-  const [profiles, setProfiles] = useState(STANDOUTS);
+  // Demo standouts are a dev-only preview deck; in production show the
+  // empty state rather than fake flat-owners people can swipe on.
+  const [profiles, setProfiles] = useState(__DEV__ ? STANDOUTS : []);
 
   const idxRef = useRef(0);
   const profileRef = useRef(profiles[0]);
@@ -179,6 +181,7 @@ export default function Standouts() {
     async function loadOwners() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
         const [{ data }, blockedIds] = await Promise.all([
           supabase
             .from('profiles')

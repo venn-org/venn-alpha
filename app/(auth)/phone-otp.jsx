@@ -39,6 +39,13 @@ export default function PhoneOtp() {
   function handleChange(val, idx) {
     const cleaned = val.replace(/\D/g, '');
     const next = [...otp];
+    if (cleaned.length > 1) {
+      // Pasted or autofilled multi-digit code — distribute across the boxes.
+      for (let i = 0; i < cleaned.length && idx + i < 6; i++) next[idx + i] = cleaned[i];
+      setOtp(next);
+      inputs.current[Math.min(idx + cleaned.length, 5)]?.focus();
+      return;
+    }
     next[idx] = cleaned;
     setOtp(next);
     if (cleaned && idx < 5) inputs.current[idx + 1]?.focus();
@@ -116,7 +123,7 @@ export default function PhoneOtp() {
               onChangeText={v => handleChange(v, i)}
               onKeyPress={e => handleKeyPress(e, i)}
               keyboardType="number-pad"
-              maxLength={1}
+              textContentType="oneTimeCode"
               selectTextOnFocus
               autoFocus={i === 0}
             />

@@ -38,7 +38,7 @@ export default function Phone() {
             : error.message
         );
       } else {
-        router.push(`/(auth)/phone-otp?phone=${phone}&mode=${mode}`);
+        router.push(`/(auth)/phone-otp?phone=${phone}&mode=${mode ?? ''}`);
       }
     } catch (e) {
       Alert.alert('Error', e.message || 'Something went wrong. Check your connection.');

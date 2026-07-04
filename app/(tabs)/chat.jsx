@@ -27,8 +27,13 @@ const DEMO_MESSAGES = [
 export default function Chat() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { name, matchId, photo, prefill } = useLocalSearchParams();
-  const [messages, setMessages] = useState(matchId ? [] : DEMO_MESSAGES);
+  const { name, matchId: rawMatchId, photo, prefill } = useLocalSearchParams();
+  // Router params arrive as strings — a null/undefined matchId can serialize
+  // to the literal text "null"/"undefined". Normalise those to "no match".
+  const matchId = rawMatchId && rawMatchId !== 'null' && rawMatchId !== 'undefined' ? rawMatchId : null;
+  // The scripted demo conversation is a dev-only preview — real users
+  // arriving without a match must never see it presented as real messages.
+  const [messages, setMessages] = useState(matchId ? [] : (__DEV__ ? DEMO_MESSAGES : []));
   const [loadingMsgs, setLoadingMsgs] = useState(!!matchId);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -281,6 +286,11 @@ export default function Chat() {
   async function send() {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!matchId && !__DEV__) {
+      // No match row to attach the message to — don't silently drop it.
+      Alert.alert('Conversation not ready', 'Please go back and open this chat again from Messages.');
+      return;
+    }
     animateSend();
     const localId = Date.now().toString();
     const msg = { id: localId, content: trimmed, mine: true, read: false, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };

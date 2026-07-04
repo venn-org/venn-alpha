@@ -101,12 +101,8 @@ export default function TabsLayout() {
         name="feed"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => (
-            <Ionicons
-              name="home-outline"
-              size={22}
-              color={focused ? colors.blue : '#14161B'}
-            />
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -114,12 +110,8 @@ export default function TabsLayout() {
         name="standouts"
         options={{
           title: 'Standouts',
-          tabBarIcon: ({ focused }) => (
-            <Ionicons
-              name="star-outline"
-              size={22}
-              color={focused ? colors.blue : '#14161B'}
-            />
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'star' : 'star-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -127,11 +119,11 @@ export default function TabsLayout() {
         name="likes"
         options={{
           title: 'Likes',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               name={focused ? 'heart' : 'heart-outline'}
               size={22}
-              color={focused ? colors.blue : '#14161B'}
+              color={color}
               showDot={unreadLikes > 0}
             />
           ),
@@ -141,11 +133,11 @@ export default function TabsLayout() {
         name="messages"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               name={focused ? 'chatbubble' : 'chatbubble-outline'}
               size={22}
-              color={focused ? colors.blue : '#14161B'}
+              color={color}
               showDot={unreadMessages > 0}
             />
           ),
@@ -155,12 +147,8 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ focused }) => (
-            <Ionicons
-              name="person-outline"
-              size={22}
-              color={focused ? colors.blue : '#14161B'}
-            />
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
           ),
         }}
       />

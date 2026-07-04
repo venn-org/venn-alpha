@@ -46,7 +46,7 @@ export default function SignUp() {
             <Text style={styles.phoneBtnText}>Continue with phone</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email')} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email?mode=signup')} activeOpacity={0.85}>
             <Text style={styles.emailBtnIcon}>✉</Text>
             <Text style={styles.emailBtnText}>Continue with email</Text>
           </TouchableOpacity>
