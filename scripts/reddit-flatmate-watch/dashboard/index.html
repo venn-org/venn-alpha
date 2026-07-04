@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Venn — Reddit flatmate watch</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+    background: #fff;
+    color: #14161B;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14161B; color: #E6E8EE; }
+    .card { background: #1e2029 !important; border-color: #2c2f3a !important; }
+    .draft { background: #14161B !important; }
+    a { color: #8A5BFF !important; }
+  }
+  h1 { font-size: 1.3rem; margin-bottom: 0; }
+  .meta { color: #5A6072; font-size: 0.85rem; margin: 4px 0 24px; }
+  .card {
+    border: 1px solid #E6E8EE;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+    background: #FCFCFD;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card .sub { font-size: 0.8rem; color: #5A6072; margin-bottom: 10px; }
+  .draft {
+    background: #EDEEF2;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+  a { color: #335CFF; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #E6E8EE;
+    background: transparent;
+    cursor: pointer;
+  }
+  #empty, #error { color: #5A6072; }
+</style>
+</head>
+<body>
+  <h1>Reddit flatmate watch</h1>
+  <p class="meta">Read-only. Nothing here is auto-posted — copy a draft, edit it, and post it yourself. Refreshes every 60s.</p>
+  <div id="list"></div>
+  <p id="empty" style="display:none">No matches found yet.</p>
+  <p id="error" style="display:none"></p>
+
+  <script>
+    const DATA_URL = "https://raw.githubusercontent.com/amr1tnag/venn-alpha/master/scripts/reddit-flatmate-watch/data/matches.json";
+
+    async function load() {
+      const listEl = document.getElementById("list");
+      const emptyEl = document.getElementById("empty");
+      const errorEl = document.getElementById("error");
+      errorEl.style.display = "none";
+      try {
+        const res = await fetch(DATA_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const matches = await res.json();
+
+        if (!matches.length) {
+          emptyEl.style.display = "block";
+          listEl.innerHTML = "";
+          return;
+        }
+        emptyEl.style.display = "none";
+
+        listEl.innerHTML = matches.map((m) => `
+          <div class="card">
+            <h3>r/${escapeHtml(m.subreddit)} — ${escapeHtml(m.title)}</h3>
+            <div class="sub">
+              <a href="${escapeHtml(m.permalink)}" target="_blank" rel="noopener">View on Reddit</a>
+              &middot; u/${escapeHtml(m.author)}
+              &middot; ${new Date(m.createdUtc * 1000).toLocaleString()}
+            </div>
+            <div class="draft">${escapeHtml(m.draft)}</div>
+            <button onclick="copyDraft(this)" data-draft="${encodeURIComponent(m.draft)}">Copy draft</button>
+          </div>
+        `).join("");
+      } catch (err) {
+        errorEl.textContent = "Couldn't load matches: " + err.message;
+        errorEl.style.display = "block";
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    function copyDraft(btn) {
+      const text = decodeURIComponent(btn.dataset.draft);
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => (btn.textContent = original), 1500);
+      });
+    }
+
+    load();
+    setInterval(load, 60000);
+  </script>
+</body>
+</html>
