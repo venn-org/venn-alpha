@@ -605,13 +605,39 @@ One-time setup, in order:
    without a user JWT — the `SEND_PUSH_WEBHOOK_SECRET` header check from step
    3 is what actually protects this endpoint instead.
 
-5. **Create the Database Webhook** — Supabase Dashboard →
-   **Database → Webhooks → Create a new hook**:
-   - Table: `notifications`
-   - Events: `Insert`
-   - Type: `Supabase Edge Functions`
-   - Edge Function: `send-push`
-   - HTTP Headers: add `x-webhook-secret: <the same random string from step 3>`
+5. **Wire up the trigger** so an INSERT on `notifications` calls the function.
+   Either works — they produce the same underlying trigger:
+
+   - **Dashboard**: **Database → Webhooks → Create a new hook** — table
+     `notifications`, event `Insert`, type `Supabase Edge Functions`, function
+     `send-push`, header `x-webhook-secret: <the random string from step 3>`.
+   - **SQL** (what this project actually runs — see live definition via
+     `supabase db query --linked "select prosrc from pg_proc where proname='notify_send_push'"`):
+     ```sql
+     CREATE EXTENSION IF NOT EXISTS pg_net;
+
+     CREATE OR REPLACE FUNCTION notify_send_push()
+     RETURNS TRIGGER AS $$
+     BEGIN
+       PERFORM net.http_post(
+         url := 'https://<project-ref>.supabase.co/functions/v1/send-push',
+         body := jsonb_build_object('type', 'INSERT', 'table', 'notifications', 'record', to_jsonb(NEW)),
+         headers := jsonb_build_object(
+           'Content-Type', 'application/json',
+           'x-webhook-secret', '<the random string from step 3>'
+         )
+       );
+       RETURN NEW;
+     END;
+     $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, net;
+
+     DROP TRIGGER IF EXISTS trg_notify_send_push ON notifications;
+     CREATE TRIGGER trg_notify_send_push
+       AFTER INSERT ON notifications
+       FOR EACH ROW EXECUTE FUNCTION notify_send_push();
+     ```
+     `net.http_post` is async — check delivery via
+     `select * from net._http_response order by created desc limit 5;`.
 
 6. Run the SQL in **§17** and **§18** above if you haven't already.
 
