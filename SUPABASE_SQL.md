@@ -524,3 +524,98 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 REVOKE EXECUTE ON FUNCTION delete_account() FROM anon, public;
 GRANT EXECUTE ON FUNCTION delete_account() TO authenticated;
 ```
+
+---
+
+## 18. Web push subscriptions
+
+Stores one row per browser subscription (a user can have several — phone,
+laptop, etc.). The `endpoint` uniquely identifies a subscription, so
+re-subscribing the same browser upserts rather than duplicating:
+
+```sql
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  endpoint   text NOT NULL UNIQUE,
+  p256dh     text NOT NULL,
+  auth       text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Users can only manage their own subscriptions
+CREATE POLICY "push_subscriptions_select_own" ON push_subscriptions
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "push_subscriptions_insert_own" ON push_subscriptions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "push_subscriptions_update_own" ON push_subscriptions
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "push_subscriptions_delete_own" ON push_subscriptions
+  FOR DELETE USING (auth.uid() = user_id);
+```
+
+The `send-push` edge function reads across users (to deliver a notification
+to its recipient), so it uses the service role key and bypasses these
+policies entirely — they exist only to stop one client from reading or
+tampering with another user's subscription rows directly.
+
+---
+
+## 19. Deploying web push notifications
+
+One-time setup, in order:
+
+1. **Generate VAPID keys** (from the project root):
+   ```
+   npx web-push generate-vapid-keys
+   ```
+   This prints a public and private key. Also pick a contact address for the
+   `subject`, e.g. `mailto:you@example.com`.
+
+2. **Client env var** — add to your `.env` and to the Vercel project's
+   Environment Variables:
+   ```
+   EXPO_PUBLIC_VAPID_PUBLIC_KEY=<the public key>
+   ```
+   (Public key only — it's safe to expose, it's the same value the browser
+   sends in every subscription request.)
+
+3. **Edge function secrets** — these stay server-side, never sent to the
+   client:
+   ```
+   npx supabase secrets set VAPID_PUBLIC_KEY=<the public key>
+   npx supabase secrets set VAPID_PRIVATE_KEY=<the private key>
+   npx supabase secrets set VAPID_SUBJECT=mailto:you@example.com
+   npx supabase secrets set SEND_PUSH_WEBHOOK_SECRET=<any long random string you generate>
+   ```
+   `SEND_PUSH_WEBHOOK_SECRET` isn't part of web-push — it's a shared secret
+   the function checks on every request so only your own Database Webhook can
+   invoke it (see step 5).
+
+4. **Deploy the function**:
+   ```
+   npx supabase functions deploy send-push --no-verify-jwt
+   ```
+   `--no-verify-jwt` is required because Database Webhooks call the function
+   without a user JWT — the `SEND_PUSH_WEBHOOK_SECRET` header check from step
+   3 is what actually protects this endpoint instead.
+
+5. **Create the Database Webhook** — Supabase Dashboard →
+   **Database → Webhooks → Create a new hook**:
+   - Table: `notifications`
+   - Events: `Insert`
+   - Type: `Supabase Edge Functions`
+   - Edge Function: `send-push`
+   - HTTP Headers: add `x-webhook-secret: <the same random string from step 3>`
+
+6. Run the SQL in **§17** and **§18** above if you haven't already.
+
+After this, a new row in `notifications` triggers the webhook → the edge
+function looks up the recipient's `push_subscriptions` → sends a real browser
+push. No app rebuild needed for steps 1–6; only the `EXPO_PUBLIC_VAPID_PUBLIC_KEY`
+env var (step 2) requires a redeploy since it's baked into the client bundle.

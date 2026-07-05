@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
+import { subscribeToPush } from '../../lib/push';
 import { colors } from '../../lib/theme';
 
 export default function Notifications() {
@@ -23,6 +24,8 @@ export default function Notifications() {
     }
     const { error } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', user.id);
     if (error) { Alert.alert('Save failed', error.message); setLoading(false); return; }
+    // Best-effort — a denied permission or unsupported browser shouldn't block onboarding.
+    if (enabled) subscribeToPush(user.id);
     router.replace('/(tabs)/feed');
   }
 

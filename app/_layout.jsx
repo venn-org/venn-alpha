@@ -8,6 +8,7 @@ import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, HankenGrotesk_700B
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { supabase } from '../lib/supabase';
+import { registerServiceWorker } from '../lib/push';
 import MatchCelebration from '../components/MatchCelebration';
 
 export default function RootLayout() {
@@ -26,6 +27,12 @@ export default function RootLayout() {
     HankenGrotesk_600SemiBold,
     HankenGrotesk_700Bold,
   });
+
+  // Register early (not gated on session) so the service worker is active
+  // and can receive pushes even before/between subscribe calls.
+  useEffect(() => {
+    if (Platform.OS === 'web') registerServiceWorker();
+  }, []);
 
   useEffect(() => {
     const fallback = setTimeout(() => setReady(true), 3000);
