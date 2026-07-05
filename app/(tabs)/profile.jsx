@@ -14,6 +14,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
+import { subscribeToPush, unsubscribeFromPush } from '../../lib/push';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
@@ -1033,6 +1034,7 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState(null);
   const [paused, setPaused] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [commentFilter, setCommentFilter] = useState(true);
   const [uploadingIndex, setUploadingIndex] = useState(null);
@@ -1102,6 +1104,12 @@ export default function Profile() {
         const { data: flag, error: pausedErr } = await supabase
           .from('profiles').select('paused').eq('id', uid).single();
         if (!pausedErr) setPaused(!!flag?.paused);
+
+        if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.getRegistration();
+          const sub = await registration?.pushManager.getSubscription();
+          setPushEnabled(!!sub);
+        }
       } catch (_) {}
     }
     load();
@@ -1117,6 +1125,27 @@ export default function Profile() {
       setPaused(!next);
       Alert.alert('Could not update', error.message);
     }
+  }
+
+  async function togglePush(next) {
+    if (!next) {
+      setPushEnabled(false);
+      await unsubscribeFromPush();
+      return;
+    }
+
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) { setPushEnabled(false); return; }
+
+    const { error } = await subscribeToPush(uid);
+    // subscribeToPush treats a denied browser permission as a non-error no-op,
+    // so re-check the actual subscription rather than trusting `error` alone.
+    const registration = await navigator.serviceWorker.getRegistration();
+    const sub = await registration?.pushManager.getSubscription();
+    setPushEnabled(!!sub);
+    if (error) Alert.alert('Could not enable notifications', error.message);
+    else if (!sub) Alert.alert('Notifications blocked', 'Please allow notifications for this site in your browser settings.');
   }
 
   function confirmDeleteAccount() {
@@ -1553,6 +1582,19 @@ export default function Profile() {
               </View>
               <Switch value={paused} onValueChange={togglePause} trackColor={{ false: '#E6E8EE', true: colors.blue }} thumbColor="#fff" />
             </View>
+
+            {Platform.OS === 'web' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 12 }}>
+                <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: '#EEF1FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="notifications-outline" size={18} color={colors.blue} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: 16, color: colors.ink }}>Push notifications</Text>
+                  <Text style={{ fontFamily: 'HankenGrotesk_400Regular', fontSize: 12, color: '#9AA0B2', marginTop: 1 }}>Get notified about likes, matches, and messages</Text>
+                </View>
+                <Switch value={pushEnabled} onValueChange={togglePush} trackColor={{ false: '#E6E8EE', true: colors.blue }} thumbColor="#fff" />
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={() => { animateSettingsClose(); setTimeout(handleLogout, 250); }}
