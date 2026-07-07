@@ -645,3 +645,26 @@ After this, a new row in `notifications` triggers the webhook → the edge
 function looks up the recipient's `push_subscriptions` → sends a real browser
 push. No app rebuild needed for steps 1–6; only the `EXPO_PUBLIC_VAPID_PUBLIC_KEY`
 env var (step 2) requires a redeploy since it's baked into the client bundle.
+
+---
+
+## 20. Clear chat
+
+`messages` never had a `DELETE` policy, so nothing could wipe a conversation's
+history without also deleting the `matches` row (which unmatch/block already
+do via cascade). This adds a policy so either participant can clear the
+message history for a match while keeping the match itself intact.
+
+```sql
+CREATE POLICY "messages_delete" ON messages
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM matches
+      WHERE id = messages.match_id
+        AND (user1_id = auth.uid() OR user2_id = auth.uid())
+    )
+  );
+```
+
+Note this deletes the messages for both participants (there's no per-user
+"cleared" state), matching how the rest of this table is shared.
