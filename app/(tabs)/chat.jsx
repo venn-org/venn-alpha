@@ -11,7 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { activeStatusText } from '../../lib/presence';
 import { blockUser } from '../../lib/blocks';
-import { unmatchUser } from '../../lib/matches';
+import { unmatchUser, clearChat } from '../../lib/matches';
 import ReportSheet from '../../components/ReportSheet';
 import ProfileViewSheet from '../../components/ProfileViewSheet';
 import { ChatSkeleton } from '../../components/Skeleton';
@@ -234,6 +234,26 @@ export default function Chat() {
     contentHeightRef.current = h;
   }
 
+  function confirmClearChat() {
+    Alert.alert(
+      'Clear chat?',
+      "This deletes all messages in this conversation. This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: doClearChat },
+      ],
+    );
+  }
+
+  async function doClearChat() {
+    if (!matchId) return;
+    const { error } = await clearChat(matchId);
+    if (error) { Alert.alert('Could not clear chat', error.message); return; }
+    setMessages([]);
+    oldestCursorRef.current = null;
+    setHasMore(false);
+  }
+
   function confirmUnmatch() {
     Alert.alert(
       `Unmatch ${displayName}?`,
@@ -367,6 +387,22 @@ export default function Chat() {
               <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); if (otherProfile) setProfileVisible(true); }}>
                 <Ionicons name="person-circle-outline" size={16} color={colors.ink} />
                 <Text style={s.menuItemText}>View profile</Text>
+              </TouchableOpacity>
+              <View style={s.menuDivider} />
+              <TouchableOpacity
+                style={s.menuItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMenuOpen(false);
+                  if (!matchId) {
+                    Alert.alert('Please wait', "Still loading this conversation — try again in a moment.");
+                    return;
+                  }
+                  confirmClearChat();
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.ink} />
+                <Text style={s.menuItemText}>Clear chat</Text>
               </TouchableOpacity>
               <View style={s.menuDivider} />
               <TouchableOpacity style={s.menuItem} activeOpacity={0.7} onPress={() => { setMenuOpen(false); confirmUnmatch(); }}>
