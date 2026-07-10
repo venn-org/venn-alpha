@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { ImageBackground, View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, ImageBackground, View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../lib/theme';
+import { enterWithoutAuth } from '../../lib/directAuth';
 
 export default function Login() {
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -22,6 +24,26 @@ export default function Login() {
       Animated.spring(bottomY,    { toValue: 0, friction: 8, tension: 40, delay: 500, useNativeDriver: false }),
     ]).start();
   }, []);
+
+  async function handleDirectEntry() {
+    if (loading) return;
+    setLoading(true);
+    const { error } = await enterWithoutAuth(router);
+    if (error) {
+      Alert.alert('Could not continue', error.message || 'Please try again.');
+      setLoading(false);
+    }
+  }
+
+  function handleCreateAccount() {
+    if (Platform.OS === 'web') handleDirectEntry();
+    else router.push('/(auth)/signup');
+  }
+
+  function handleSignIn() {
+    if (Platform.OS === 'web') handleDirectEntry();
+    else router.push('/(auth)/signin');
+  }
 
   return (
     <View style={styles.frame}>
@@ -49,18 +71,20 @@ export default function Login() {
         {/* bottom: buttons */}
         <Animated.View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }, { opacity: bottomOp, transform: [{ translateY: bottomY }] }]}>
           <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => router.push('/(auth)/signup')}
+            style={[styles.primaryBtn, Platform.OS === 'web' && loading && styles.btnDisabled]}
+            onPress={handleCreateAccount}
+            disabled={Platform.OS === 'web' && loading}
             activeOpacity={0.85}
           >
             <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-              <Text style={styles.primaryBtnText}>Create account</Text>
+              <Text style={styles.primaryBtnText}>{loading ? 'Opening Venn...' : 'Create account'}</Text>
             </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.ghostBtn}
-            onPress={() => router.push('/(auth)/signin')}
+            style={[styles.ghostBtn, Platform.OS === 'web' && loading && styles.btnDisabled]}
+            onPress={handleSignIn}
+            disabled={Platform.OS === 'web' && loading}
             activeOpacity={0.85}
           >
             <Text style={styles.ghostBtnText}>Sign in</Text>
@@ -104,6 +128,7 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
   ghostBtn: { borderRadius: 50, paddingVertical: 18, alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
   ghostBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  btnDisabled: { opacity: 0.6 },
   legal: { fontSize: 11, color: 'rgba(255,255,255,0.35)', textAlign: 'center', lineHeight: 16 },
   legalLink: { color: 'rgba(255,255,255,0.55)', textDecorationLine: 'underline' },
 });
