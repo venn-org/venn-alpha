@@ -6,13 +6,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 
-export default function EmailSignIn() {
+export default function Email() {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams();
+  const isSignup = mode === 'signup';
 
   const slideY = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -24,22 +26,33 @@ export default function EmailSignIn() {
     ]).start();
   }, []);
 
-  async function handleSend() {
+  async function handleSubmit() {
     setLoading(true);
     setError('');
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: mode !== 'signin' },
-      });
+      const { data, error } = isSignup
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
       if (error) {
-        setError(
-          mode === 'signin' && /signup|not allowed|not found/i.test(error.message ?? '')
-            ? 'No account found with this email. Try creating one instead.'
-            : error.message || error.error_description || JSON.stringify(error)
-        );
+        setError(error.message || error.error_description || JSON.stringify(error));
+        setLoading(false);
+        return;
+      }
+
+      const uid = data?.session?.user?.id;
+      if (!uid) {
+        // No session back means email confirmation is still required server-side.
+        setError('Account created. Check your email to confirm before signing in.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: p, error: profileError } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
+      if (profileError) {
+        setError(profileError.message);
       } else {
-        router.push(`/(auth)/email-otp?email=${encodeURIComponent(email)}&mode=${mode ?? ''}`);
+        router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
       }
     } catch (e) {
       setError(e.message || 'Something went wrong. Check your connection.');
@@ -48,7 +61,7 @@ export default function EmailSignIn() {
     }
   }
 
-  const valid = email.includes('@') && email.includes('.');
+  const valid = email.includes('@') && email.includes('.') && password.length >= 6;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -63,8 +76,8 @@ export default function EmailSignIn() {
             <View style={[styles.circle, { backgroundColor: colors.violet, right: 0, opacity: 0.9 }]} />
           </View>
         </View>
-        <Text style={styles.title}>What's your email?</Text>
-        <Text style={styles.subtitle}>We'll send you a 6-digit code to get started.</Text>
+        <Text style={styles.title}>{isSignup ? 'Create your account' : 'Welcome back'}</Text>
+        <Text style={styles.subtitle}>{isSignup ? 'Enter your email and a password to get started.' : 'Sign in with your email and password.'}</Text>
 
         <TextInput
           style={styles.input}
@@ -76,18 +89,27 @@ export default function EmailSignIn() {
           onChangeText={setEmail}
           autoFocus
         />
+        <TextInput
+          style={[styles.input, styles.passwordInput]}
+          placeholder="Password"
+          placeholderTextColor={colors.placeholder}
+          secureTextEntry
+          autoCapitalize="none"
+          value={password}
+          onChangeText={setPassword}
+        />
       </Animated.View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <TouchableOpacity
           style={[styles.btn, !valid && styles.btnDisabled]}
-          onPress={handleSend}
+          onPress={handleSubmit}
           disabled={!valid || loading}
           activeOpacity={0.85}
         >
           <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-            <Text style={styles.btnText}>{loading ? 'Sending…' : 'Send OTP'}</Text>
+            <Text style={styles.btnText}>{loading ? (isSignup ? 'Creating…' : 'Signing in…') : (isSignup ? 'Create account' : 'Sign in')}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -106,6 +128,7 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 26, color: colors.ink, letterSpacing: -0.8, marginBottom: 8 },
   subtitle: { fontSize: 14, color: colors.placeholder, marginBottom: 28 },
   input: { backgroundColor: colors.inputBg, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 17, fontSize: 16, color: colors.ink, borderWidth: 2, borderColor: 'transparent' },
+  passwordInput: { marginTop: 12 },
   footer: { paddingHorizontal: 28, paddingTop: 12 },
   btn: { borderRadius: 50, overflow: 'hidden' },
   btnDisabled: { opacity: 0.32 },

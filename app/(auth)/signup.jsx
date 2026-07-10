@@ -39,12 +39,7 @@ export default function SignUp() {
             <Text style={styles.appName}>Venn</Text>
           </View>
           <Text style={styles.title}>Get started</Text>
-          <Text style={styles.subtitle}>Choose how you'd like to create your account.</Text>
-
-          <TouchableOpacity style={styles.phoneBtn} onPress={() => router.push('/(auth)/phone?mode=signup')} activeOpacity={0.9}>
-            <Text style={styles.phoneBtnIcon}>📞</Text>
-            <Text style={styles.phoneBtnText}>Continue with phone</Text>
-          </TouchableOpacity>
+          <Text style={styles.subtitle}>Enter your email to create your account.</Text>
 
           <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email?mode=signup')} activeOpacity={0.85}>
             <Text style={styles.emailBtnIcon}>✉</Text>
@@ -75,10 +70,7 @@ const styles = StyleSheet.create({
   appName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17, color: '#fff' },
   title: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 26, color: '#fff', letterSpacing: -0.8 },
   subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.55)', marginBottom: 4 },
-  phoneBtn: { backgroundColor: '#fff', borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  phoneBtnIcon: { fontSize: 18 },
-  phoneBtnText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
-  emailBtn: { borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
-  emailBtnIcon: { fontSize: 16, color: '#fff' },
-  emailBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  emailBtn: { backgroundColor: '#fff', borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  emailBtnIcon: { fontSize: 18 },
+  emailBtnText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
 });

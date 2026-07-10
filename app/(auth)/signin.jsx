@@ -41,11 +41,6 @@ export default function SignIn() {
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to continue finding your flatmate.</Text>
 
-          <TouchableOpacity style={styles.phoneBtn} onPress={() => router.push('/(auth)/phone?mode=signin')} activeOpacity={0.9}>
-            <Text style={styles.phoneBtnIcon}>📞</Text>
-            <Text style={styles.phoneBtnText}>Sign in with phone</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.emailBtn} onPress={() => router.push('/(auth)/email?mode=signin')} activeOpacity={0.85}>
             <Text style={styles.emailBtnIcon}>✉</Text>
             <Text style={styles.emailBtnText}>Sign in with email</Text>
@@ -75,10 +70,7 @@ const styles = StyleSheet.create({
   appName: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 17, color: '#fff' },
   title: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 26, color: '#fff', letterSpacing: -0.8 },
   subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.55)', marginBottom: 4 },
-  phoneBtn: { backgroundColor: '#fff', borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  phoneBtnIcon: { fontSize: 18 },
-  phoneBtnText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
-  emailBtn: { borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
-  emailBtnIcon: { fontSize: 16, color: '#fff' },
-  emailBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  emailBtn: { backgroundColor: '#fff', borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  emailBtnIcon: { fontSize: 18 },
+  emailBtnText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
 });
