@@ -52,7 +52,7 @@ export default function Photos() {
   useEffect(() => {
     async function loadUserType() {
       const uid = getCurrentUserId();
-      if (!user) return;
+      if (!uid) return;
       const { data } = await supabase.from('profiles').select('user_type').eq('id', uid).single();
       setUserType(data?.user_type ?? 'seeking');
     }

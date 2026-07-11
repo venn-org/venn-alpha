@@ -183,7 +183,7 @@ export default function Standouts() {
     async function loadOwners() {
       try {
         const uid = getCurrentUserId();
-        if (!user) return;
+        if (!uid) return;
         const [{ data }, blockedIds, pausedIds] = await Promise.all([
           supabase
             .from('profiles')

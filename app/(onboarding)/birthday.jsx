@@ -32,7 +32,7 @@ export default function Birthday() {
     if (!validate()) return;
     const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     const uid = getCurrentUserId();
-    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+    if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({ birthday: iso }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/pronouns');

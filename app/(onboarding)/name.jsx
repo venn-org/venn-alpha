@@ -17,7 +17,7 @@ export default function Name() {
   async function handleContinue() {
     setLoading(true);
     const uid = getCurrentUserId();
-    if (!user) {
+    if (!uid) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
       router.replace('/(auth)/login');

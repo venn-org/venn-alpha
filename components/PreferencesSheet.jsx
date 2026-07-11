@@ -94,7 +94,6 @@ export function isPrefSet(prefs, key, multi) {
 
 export async function savePrefsToSupabase(p) {
   const uid = getCurrentUserId();
-  const uid = uid;
   if (!uid) return;
   const { error } = await supabase.from('profiles').update({
     pref_role:       p.role       ?? null,

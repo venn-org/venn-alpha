@@ -28,7 +28,7 @@ export default function Lifestyle() {
   async function handleNext() {
     if (!allAnswered) return; // the arrow renders grey until every question is answered
     const uid = getCurrentUserId();
-    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+    if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({
       drink: answers.drink ?? null,
       tobacco: answers.tobacco ?? null,

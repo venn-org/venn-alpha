@@ -17,7 +17,7 @@ export default function Notifications() {
   async function finish() {
     setLoading(true);
     const uid = getCurrentUserId();
-    if (!user) {
+    if (!uid) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
       router.replace('/(auth)/login');

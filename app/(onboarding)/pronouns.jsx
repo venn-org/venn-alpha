@@ -22,7 +22,7 @@ export default function Pronouns() {
   async function handleNext() {
     if (selected.length > 0) {
       const uid = getCurrentUserId();
-      if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+      if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
       const { error } = await supabase.from('profiles').update({ pronouns: selected }).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
     }

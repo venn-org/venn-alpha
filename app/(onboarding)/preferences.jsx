@@ -22,7 +22,7 @@ export default function Preferences() {
   useEffect(() => {
     async function loadUserType() {
       const uid = getCurrentUserId();
-      if (!user) return;
+      if (!uid) return;
       const { data } = await supabase.from('profiles').select('user_type').eq('id', uid).single();
       setUserType(data?.user_type ?? 'seeking');
     }
@@ -35,7 +35,7 @@ export default function Preferences() {
 
   async function handleContinue() {
     const uid = getCurrentUserId();
-    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+    if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const updates = {
       preferred_areas: areas.length > 0 ? areas : null,
       budget: budget ?? null,

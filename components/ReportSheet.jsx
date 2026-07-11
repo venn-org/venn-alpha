@@ -52,7 +52,6 @@ export default function ReportSheet({ visible, targetId, targetName, onClose, on
     setSubmitting(true);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('reports').insert({
         reporter_id: uid,

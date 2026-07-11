@@ -18,7 +18,7 @@ export default function AccountType() {
     if (!type) return;
     setLoading(true);
     const uid = getCurrentUserId();
-    if (!user) {
+    if (!uid) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
       router.replace('/(auth)/login');
