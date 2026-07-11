@@ -23,11 +23,23 @@ export default function Name() {
       router.replace('/(auth)/login');
       return;
     }
-    const { error } = await supabase.from('profiles').update({
+    const { data, error } = await supabase.from('profiles').update({
       name: last.trim() ? `${first.trim()} ${last.trim()}` : first.trim(),
-    }).eq('id', uid);
-    if (error) Alert.alert('Error', error.message);
-    else router.push('/(onboarding)/account-type');
+    }).eq('id', uid).select();
+
+    if (error) {
+      Alert.alert('Error', error.message);
+      setLoading(false);
+      return;
+    }
+    
+    if (!data || data.length === 0) {
+      Alert.alert('Debug', 'The update succeeded but 0 rows were affected! This means RLS prevented the update or the row ID did not match.');
+      setLoading(false);
+      return;
+    }
+
+    router.push('/(onboarding)/account-type');
     setLoading(false);
   }
 

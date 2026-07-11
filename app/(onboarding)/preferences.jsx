@@ -6,6 +6,7 @@ import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getCurrentUserId } from '../../lib/auth';
+import { toDb } from '../../lib/enums';
 
 const AREAS = ['Bandra', 'Andheri', 'Powai', 'Malad', 'Goregaon', 'Thane', 'Navi Mumbai', 'Pune', 'Dadar', 'Kurla', 'Lower Parel', 'Worli'];
 const BUDGETS = ['₹5k–10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
@@ -36,13 +37,37 @@ export default function Preferences() {
   async function handleContinue() {
     const uid = getCurrentUserId();
     if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+    
+    // Map the UI budget string back to the DB enum.
+    // e.g. "₹10k–20k" -> "10k_20k"
+    const dbBudget = budget ? toDb('pref_budget', budget) : null;
+    
+    // Map the UI flat_type string back to the DB enum.
+    // e.g. "1 BHK" -> "1_bhk"
+    const dbFlatType = flatType ? toDb('flat_type', flatType) : null;
+
     const updates = {
       preferred_areas: areas.length > 0 ? areas : null,
-      budget: budget ?? null,
+      pref_areas: areas.length > 0 ? areas : null,
+      budget: dbBudget,
+      pref_budget: dbBudget,
     };
-    if (userType === 'owner' && flatType) updates.flat_type = flatType;
+    
+    if (userType === 'owner' && dbFlatType) {
+      updates.flat_type = dbFlatType;
+      updates.pref_flat_type = [dbFlatType];
+    }
+    
+    // Set what they are looking for based on what they are
+    if (userType === 'owner') {
+      updates.pref_role = 'seeking'; // Owners look for seekers
+    } else {
+      updates.pref_role = 'owner'; // Seekers look for owners
+    }
+    
     const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
+    
     router.push('/(onboarding)/photos');
   }
 

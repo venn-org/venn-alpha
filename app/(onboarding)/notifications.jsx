@@ -25,7 +25,7 @@ export default function Notifications() {
     }
     const { error } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); setLoading(false); return; }
-    // Best-effort — a denied permission or unsupported browser shouldn't block onboarding.
+    global.onboardingDone = true;
     if (enabled) subscribeToPush(uid);
     router.replace('/(tabs)/feed');
   }
