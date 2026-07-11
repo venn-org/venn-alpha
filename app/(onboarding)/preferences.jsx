@@ -48,10 +48,22 @@ export default function Preferences() {
 
     const updates = {
       preferred_areas: areas.length > 0 ? areas : null,
+      pref_areas: areas.length > 0 ? areas : null,
       budget: dbBudget,
+      pref_budget: dbBudget,
     };
     
-    if (userType === 'owner' && dbFlatType) updates.flat_type = dbFlatType;
+    if (userType === 'owner' && dbFlatType) {
+      updates.flat_type = dbFlatType;
+      updates.pref_flat_type = [dbFlatType];
+    }
+    
+    // Set what they are looking for based on what they are
+    if (userType === 'owner') {
+      updates.pref_role = 'seeking'; // Owners look for seekers
+    } else {
+      updates.pref_role = 'owner'; // Seekers look for owners
+    }
     
     const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }

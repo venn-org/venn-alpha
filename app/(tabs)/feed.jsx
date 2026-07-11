@@ -818,7 +818,7 @@ export default function Feed() {
       if (!uid) return;
       const { data: me } = await supabase
         .from('profiles')
-        .select('name,photos,pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
+        .select('name,photos,user_type,preferred_areas,budget,flat_type,pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
         .eq('id', uid)
         .single();
       if (me) {
@@ -854,7 +854,7 @@ export default function Feed() {
         // Load this user's saved preferences
         const { data: me } = await supabase
           .from('profiles')
-          .select('name,photos,pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
+          .select('name,photos,user_type,preferred_areas,budget,flat_type,pref_role,pref_areas,pref_flat_type,pref_budget,pref_move_in,pref_gender,pref_age,pref_occupation,pref_food,pref_smoking,pref_drinking,pref_pets')
           .eq('id', uid)
           .single();
         let currentPrefs = INIT_PREFS;
