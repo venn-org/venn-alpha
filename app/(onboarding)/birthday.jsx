@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 export default function Birthday() {
   const [day, setDay] = useState('');
@@ -30,9 +31,9 @@ export default function Birthday() {
   async function handleContinue() {
     if (!validate()) return;
     const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
-    const { error } = await supabase.from('profiles').update({ birthday: iso }).eq('id', user.id);
+    const uid = getCurrentUserId();
+    if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+    const { error } = await supabase.from('profiles').update({ birthday: iso }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/pronouns');
   }

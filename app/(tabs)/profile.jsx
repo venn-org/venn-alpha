@@ -15,13 +15,15 @@ import { colors } from '../../lib/theme';
 import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import { subscribeToPush, unsubscribeFromPush } from '../../lib/push';
+import { getCurrentUserId, signOutUser } from '../../lib/auth';
+import { toUI, toDb } from '../../lib/enums';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
 const PHOTO_SLOT_SIZE = Math.floor((SCREEN_W - 40 - 16) / 3); // 40 = 2×20 side padding, 16 = 2×8 gaps
 
 const AREAS = ['Bandra', 'Andheri', 'Powai', 'Malad', 'Goregaon', 'Thane', 'Navi Mumbai', 'Pune', 'Dadar', 'Kurla', 'Lower Parel', 'Worli'];
-const BUDGETS = ['₹5k–10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
+const BUDGETS = ['Under ₹10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
 
 // ─── Prompt library ───────────────────────────────────────────────────────────
 
@@ -240,16 +242,15 @@ function BasicInfoSheet({ visible, profile, onSave, onClose }) {
     setError('');
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       if (!uid) return;
       const updates = {
         name: name.trim(),
-        gender,
+        gender: toDb('gender', gender),
         pronouns: pronouns.length ? pronouns : null,
-        drink: lifestyle.drink ?? null,
-        tobacco: lifestyle.tobacco ?? null,
-        weed: lifestyle.weed ?? null,
+        drink: lifestyle.drink ? toDb('lifestyle', lifestyle.drink) : null,
+        tobacco: lifestyle.tobacco ? toDb('lifestyle', lifestyle.tobacco) : null,
+        weed: lifestyle.weed ? toDb('lifestyle', lifestyle.weed) : null,
       };
       if (day && month && year) {
         updates.birthday = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -377,8 +378,7 @@ function BlockListSheet({ visible, onClose }) {
   async function load() {
     setLoading(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       const profiles = await getBlockedProfiles(uid);
       setBlocked(profiles);
     } catch (_) {
@@ -397,8 +397,7 @@ function BlockListSheet({ visible, onClose }) {
 
   async function unblock(target) {
     setBlocked(prev => prev.filter(p => p.id !== target.id));
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) return;
     await unblockUser(uid, target.id);
   }
@@ -489,8 +488,7 @@ function WorkEduSheet({ visible, profile, onSave, onClose }) {
   async function save() {
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       if (!uid) return;
       const { error } = await supabase.from('profiles').update({
         job_company: company.trim() || null,
@@ -965,10 +963,10 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
   async function save() {
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       if (!uid) return;
-      const { error } = await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
+      const updates = { budget: toDb('pref_budget', budget), preferred_areas: areas.length ? areas : null };
+      const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
       onSave({ budget, preferred_areas: areas.length ? areas : null });
     } catch (e) {
@@ -1090,15 +1088,23 @@ export default function Profile() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
         if (!uid) return;
         const { data } = await supabase
           .from('profiles')
           .select('id, name, birthday, gender, pronouns, drink, tobacco, weed, photos, preferred_areas, budget, prompts, onboarding_done, job_company, job_title, education_school, education_level, verified')
           .eq('id', uid)
           .single();
-        if (data) setProfile(data);
+        if (data) {
+          setProfile({
+            ...data,
+            gender: toUI('gender', data.gender),
+            drink: toUI('lifestyle', data.drink),
+            tobacco: toUI('lifestyle', data.tobacco),
+            weed: toUI('lifestyle', data.weed),
+            budget: toUI('pref_budget', data.budget),
+          });
+        }
         // Fetched separately and fail-soft so the profile screen still works
         // before the `paused` column exists (SUPABASE_SQL.md #17).
         const { data: flag, error: pausedErr } = await supabase
@@ -1117,8 +1123,7 @@ export default function Profile() {
 
   async function togglePause(next) {
     setPaused(next);
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) return;
     const { error } = await supabase.from('profiles').update({ paused: next }).eq('id', uid);
     if (error) {
@@ -1134,8 +1139,7 @@ export default function Profile() {
       return;
     }
 
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) { setPushEnabled(false); return; }
 
     const { error } = await subscribeToPush(uid);
@@ -1163,7 +1167,7 @@ export default function Profile() {
     const { error } = await supabase.rpc('delete_account');
     if (error) { Alert.alert('Could not delete account', error.message); return; }
     // The user no longer exists server-side; clear the local session to land on login.
-    supabase.auth.signOut();
+    signOutUser();
   }
 
   async function pickPhoto(index) {
@@ -1175,8 +1179,7 @@ export default function Profile() {
     const asset = result.assets[0];
     setUploadingIndex(index);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       const lastSegment = asset.uri.split('?')[0].split('/').pop() || '';
       const dotIndex = lastSegment.lastIndexOf('.');
       const ext = dotIndex > 0 && dotIndex < lastSegment.length - 1 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';
@@ -1207,7 +1210,7 @@ export default function Profile() {
   }
 
   async function savePrompt({ q, a }) {
-    const uid = (await supabase.auth.getUser()).data?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) { Alert.alert('Not signed in', 'Please sign in to save prompts.'); return; }
     const current = Array.isArray(profile?.prompts) ? [...profile.prompts] : [];
     let updated;
@@ -1225,7 +1228,7 @@ export default function Profile() {
   }
 
   async function deletePrompt() {
-    const uid = (await supabase.auth.getUser()).data?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) return;
     const updated = (profile?.prompts ?? []).filter(pr => pr.q !== editingPrompt?.q);
     const { error } = await supabase.from('profiles').update({ prompts: updated }).eq('id', uid);
@@ -1238,7 +1241,7 @@ export default function Profile() {
   function handleLogout() {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      { text: 'Log out', style: 'destructive', onPress: () => signOutUser() },
     ]);
   }
 

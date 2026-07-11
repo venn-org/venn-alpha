@@ -15,9 +15,11 @@ import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import PreferencesSheet, { INIT_PREFS, savePrefsToSupabase } from '../../components/PreferencesSheet';
+import { mapDbPrefsToUI } from '../../lib/enums';
 import MatchCelebration from '../../components/MatchCelebration';
 import ReportSheet from '../../components/ReportSheet';
 import { LikesSkeleton } from '../../components/Skeleton';
+import { getCurrentUserId } from '../../lib/auth';
 
 const { width: W } = Dimensions.get('window');
 const CARD_W = (W - 48) / 2;
@@ -248,8 +250,7 @@ export default function Likes() {
   // appear when switching to this tab, making a separate prefs reload redundant.
   const loadLikes = useCallback(async () => {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
         if (!uid) return;
 
         const [{ data: likesData }, { data: me }, blockedIds, { data: matchRows }] = await Promise.all([
@@ -274,20 +275,7 @@ export default function Likes() {
 
         if (likesData) setLikes(likesData.filter(l => !blockedIds.has(l.from_user_id) && !matchedIds.has(l.from_user_id)));
         if (me) {
-          setPrefs({
-            role:       me.pref_role       ?? null,
-            areas:      me.pref_areas      ?? [],
-            flatType:   me.pref_flat_type  ?? [],
-            budget:     me.pref_budget     ?? null,
-            moveIn:     me.pref_move_in    ?? null,
-            gender:     me.pref_gender     ?? null,
-            age:        me.pref_age        ?? null,
-            occupation: me.pref_occupation ?? [],
-            food:       me.pref_food       ?? [],
-            smoking:    me.pref_smoking    ?? null,
-            drinking:   me.pref_drinking   ?? null,
-            pets:       me.pref_pets       ?? [],
-          });
+          setPrefs(mapDbPrefsToUI(me) ?? INIT_PREFS);
         }
       } catch (_) {}
       finally {
@@ -318,8 +306,7 @@ export default function Likes() {
   async function handleLikeBack(like) {
     setSelected(null);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
       if (!uid) return;
       const { error: likeError } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: like.from_user_id });
       // Already liked (unique constraint) — fall through to the match check below.
@@ -338,8 +325,7 @@ export default function Likes() {
   async function handleBlockLike(like) {
     setSelected(null);
     setLikes(prev => prev.filter(l => l.id !== like.id));
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) return;
     const { error } = await blockUser(uid, like.from_user_id);
     if (error) Alert.alert('Could not block', error.message);

@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 const OPTIONS = ['she', 'her', 'hers', 'he', 'him', 'his', 'they', 'them'];
 
@@ -20,9 +21,9 @@ export default function Pronouns() {
 
   async function handleNext() {
     if (selected.length > 0) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
-      const { error } = await supabase.from('profiles').update({ pronouns: selected }).eq('id', user.id);
+      const uid = getCurrentUserId();
+      if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
+      const { error } = await supabase.from('profiles').update({ pronouns: selected }).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
     }
     router.push('/(onboarding)/gender');

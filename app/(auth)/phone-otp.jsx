@@ -3,14 +3,14 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Animated } 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { verifyPhoneOtp, sendPhoneOtp, ensureProfile, isOnboardingComplete } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 
 export default function PhoneOtp() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
-  // Resend cooldown — a code was just sent to reach this screen, and spamming
-  // resend runs straight into Supabase's rate limit with a cryptic error.
+  // Resend cooldown — a code was just sent to reach this screen
   const [cooldown, setCooldown] = useState(30);
   const inputs = useRef([]);
   const router = useRouter();
@@ -68,40 +68,40 @@ export default function PhoneOtp() {
 
   async function handleVerify() {
     setLoading(true);
-    const token = otp.join('');
-    const { data, error } = await supabase.auth.verifyOtp({ phone: `+91${phone}`, token, type: 'sms' });
-    if (error) {
-      shake();
-      Alert.alert('Error', error.message);
-      setLoading(false);
-      return;
-    }
-    // Navigate directly instead of relying solely on _layout's auth-state
-    // listener to redirect — that listener can race with this screen and
-    // leave the user stuck here until a manual reload.
-    const uid = data?.session?.user?.id;
-    if (uid) {
-      const { data: p, error: profileError } = await supabase.from('profiles').select('onboarding_done').eq('id', uid).single();
-      if (profileError) {
-        Alert.alert('Could not load profile', profileError.message);
-      } else {
-        router.replace(p?.onboarding_done ? '/(tabs)/feed' : '/(onboarding)/name');
+    const code = otp.join('');
+    try {
+      const confirmationResult = globalThis.__vennPhoneConfirmation;
+      if (!confirmationResult) {
+        Alert.alert('Error', 'Session expired. Please go back and request a new code.');
+        setLoading(false);
+        return;
       }
+
+      await verifyPhoneOtp(confirmationResult, code);
+
+      // Ensure profile exists in Supabase
+      await ensureProfile();
+
+      // Navigate based on onboarding status
+      const done = await isOnboardingComplete();
+      router.replace(done ? '/(tabs)/feed' : '/(onboarding)/name');
+    } catch (error) {
+      shake();
+      Alert.alert('Error', error.message || 'Invalid code. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleResend() {
     if (cooldown > 0) return;
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: `+91${phone}`,
-      options: { shouldCreateUser: mode !== 'signin' },
-    });
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
+    try {
+      const confirmationResult = await sendPhoneOtp(phone);
+      globalThis.__vennPhoneConfirmation = confirmationResult;
       setCooldown(30);
       Alert.alert('Code resent', `A new code was sent to +91 ${phone}.`);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Could not resend code.');
     }
   }
 

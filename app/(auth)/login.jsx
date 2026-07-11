@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../lib/theme';
-import { enterWithoutAuth } from '../../lib/directAuth';
+import { signInWithGoogle, ensureProfile, isOnboardingComplete } from '../../lib/auth';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -25,24 +25,19 @@ export default function Login() {
     ]).start();
   }, []);
 
-  async function handleDirectEntry() {
+  async function handleGoogleSignIn() {
     if (loading) return;
     setLoading(true);
-    const { error } = await enterWithoutAuth(router);
-    if (error) {
-      Alert.alert('Could not continue', error.message || 'Please try again.');
+    try {
+      await signInWithGoogle();
+      await ensureProfile();
+      const done = await isOnboardingComplete();
+      router.replace(done ? '/(tabs)/feed' : '/(onboarding)/name');
+    } catch (e) {
+      Alert.alert('Could not sign in', e.message || 'Please try again.');
+    } finally {
       setLoading(false);
     }
-  }
-
-  function handleCreateAccount() {
-    if (Platform.OS === 'web') handleDirectEntry();
-    else router.push('/(auth)/signup');
-  }
-
-  function handleSignIn() {
-    if (Platform.OS === 'web') handleDirectEntry();
-    else router.push('/(auth)/signin');
   }
 
   return (
@@ -71,24 +66,33 @@ export default function Login() {
         {/* bottom: buttons */}
         <Animated.View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }, { opacity: bottomOp, transform: [{ translateY: bottomY }] }]}>
           <TouchableOpacity
-            style={[styles.primaryBtn, Platform.OS === 'web' && loading && styles.btnDisabled]}
-            onPress={handleCreateAccount}
-            disabled={Platform.OS === 'web' && loading}
+            style={styles.primaryBtn}
+            onPress={() => router.push('/(auth)/signup')}
             activeOpacity={0.85}
           >
             <LinearGradient colors={[colors.blue, colors.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-              <Text style={styles.primaryBtnText}>{loading ? 'Opening Venn...' : 'Create account'}</Text>
+              <Text style={styles.primaryBtnText}>Create account</Text>
             </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.ghostBtn, Platform.OS === 'web' && loading && styles.btnDisabled]}
-            onPress={handleSignIn}
-            disabled={Platform.OS === 'web' && loading}
+            style={styles.ghostBtn}
+            onPress={() => router.push('/(auth)/signin')}
             activeOpacity={0.85}
           >
             <Text style={styles.ghostBtnText}>Sign in</Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              style={[styles.googleBtn, loading && styles.btnDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.googleBtnText}>{loading ? 'Signing in…' : '🔵  Continue with Google'}</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.legal}>
             By tapping Create account or Sign in, you agree to our{' '}
@@ -128,6 +132,8 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
   ghostBtn: { borderRadius: 50, paddingVertical: 18, alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
   ghostBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  googleBtn: { borderRadius: 50, paddingVertical: 16, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
+  googleBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   btnDisabled: { opacity: 0.6 },
   legal: { fontSize: 11, color: 'rgba(255,255,255,0.35)', textAlign: 'center', lineHeight: 16 },
   legalLink: { color: 'rgba(255,255,255,0.55)', textDecorationLine: 'underline' },

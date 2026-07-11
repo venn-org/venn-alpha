@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Animated, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { sendPhoneOtp, setupRecaptcha, canSendPhoneOtp, isValidIndianPhone } from '../../lib/auth';
 
 export default function Phone() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [spamWarning, setSpamWarning] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams();
@@ -23,25 +24,41 @@ export default function Phone() {
     ]).start();
   }, []);
 
+  // Set up invisible reCAPTCHA on web (required by Firebase phone auth)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Slight delay to ensure the button element is in the DOM
+      const t = setTimeout(() => setupRecaptcha('phone-send-btn'), 500);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // Live spam-check feedback as the user types
+  useEffect(() => {
+    if (phone.length === 10 && isValidIndianPhone(phone)) {
+      const check = canSendPhoneOtp(phone);
+      setSpamWarning(check.allowed ? '' : check.reason);
+    } else {
+      setSpamWarning('');
+    }
+  }, [phone]);
+
   async function handleContinue() {
     setLoading(true);
+    setSpamWarning('');
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: `+91${phone}`,
-        options: { shouldCreateUser: mode !== 'signin' },
-      });
-      if (error) {
-        Alert.alert(
-          'Error',
-          mode === 'signin' && /signup|not allowed|not found/i.test(error.message ?? '')
-            ? 'No account found with this phone number. Try creating one instead.'
-            : error.message
-        );
-      } else {
-        router.push(`/(auth)/phone-otp?phone=${phone}&mode=${mode ?? ''}`);
-      }
+      const confirmationResult = await sendPhoneOtp(phone);
+      // Pass the confirmation result to the OTP screen via global
+      // (expo-router params can't hold objects)
+      globalThis.__vennPhoneConfirmation = confirmationResult;
+      router.push(`/(auth)/phone-otp?phone=${phone}&mode=${mode ?? ''}`);
     } catch (e) {
-      Alert.alert('Error', e.message || 'Something went wrong. Check your connection.');
+      const msg = e.message || 'Something went wrong. Check your connection.';
+      if (msg.includes('Too many') || msg.includes('wait')) {
+        setSpamWarning(msg);
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -81,14 +98,26 @@ export default function Phone() {
           />
         </View>
 
-        <Text style={styles.hint}>Venn will send you a verification code. Standard rates may apply.</Text>
+        {spamWarning ? (
+          <Text style={styles.warningText}>{spamWarning}</Text>
+        ) : (
+          <Text style={styles.hint}>Venn will send you a verification code. Standard rates may apply.</Text>
+        )}
+
+        {/* Spam protection info */}
+        <View style={styles.protectionRow}>
+          <Text style={styles.protectionIcon}>🛡️</Text>
+          <Text style={styles.protectionText}>Protected by reCAPTCHA · Max 5 codes per day</Text>
+        </View>
       </Animated.View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
         <TouchableOpacity
-          style={[styles.btn, phone.length < 10 && styles.btnDisabled]}
+          id="phone-send-btn"
+          nativeID="phone-send-btn"
+          style={[styles.btn, (phone.length < 10 || !!spamWarning) && styles.btnDisabled]}
           onPress={handleContinue}
-          disabled={phone.length < 10 || loading}
+          disabled={phone.length < 10 || loading || !!spamWarning}
           activeOpacity={0.85}
         >
           <Text style={styles.btnText}>{loading ? 'Sending…' : 'Continue'}</Text>
@@ -115,6 +144,10 @@ const styles = StyleSheet.create({
   dialCode: { fontSize: 16, fontWeight: '500', color: colors.ink },
   input: { flex: 1, backgroundColor: colors.inputBg, borderRadius: 14, paddingHorizontal: 18, height: 56, fontSize: 16, color: colors.ink, borderWidth: 2, borderColor: 'transparent' },
   hint: { fontSize: 12, color: colors.placeholder, textAlign: 'center', marginTop: 8 },
+  warningText: { fontSize: 13, color: colors.error, textAlign: 'center', marginTop: 8, fontWeight: '500' },
+  protectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16, opacity: 0.6 },
+  protectionIcon: { fontSize: 12 },
+  protectionText: { fontSize: 11, color: colors.placeholder },
   footer: { paddingHorizontal: 28, paddingTop: 12 },
   btn: { backgroundColor: colors.ink, borderRadius: 50, paddingVertical: 18, alignItems: 'center' },
   btnDisabled: { opacity: 0.32 },

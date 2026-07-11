@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { subscribeToPush } from '../../lib/push';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 export default function Notifications() {
   const [enabled, setEnabled] = useState(true);
@@ -15,17 +16,17 @@ export default function Notifications() {
 
   async function finish() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const uid = getCurrentUserId();
+    if (!uid) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
       router.replace('/(auth)/login');
       return;
     }
-    const { error } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); setLoading(false); return; }
     // Best-effort — a denied permission or unsupported browser shouldn't block onboarding.
-    if (enabled) subscribeToPush(user.id);
+    if (enabled) subscribeToPush(uid);
     router.replace('/(tabs)/feed');
   }
 
