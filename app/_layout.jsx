@@ -135,6 +135,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!ready) return;
+    if (segments.length === 0 || !segments[0]) return;
+
     const inAuth = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)';
     const inTabs = segments[0] === '(tabs)';
@@ -144,7 +146,8 @@ export default function RootLayout() {
       return;
     }
 
-    if (profileComplete) {
+    if (profileComplete || global.onboardingDone) {
+      if (!profileComplete) setProfileComplete(true);
       if (!inTabs) router.replace('/(tabs)/feed');
       return;
     }
