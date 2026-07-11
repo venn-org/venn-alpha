@@ -16,13 +16,14 @@ import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import { subscribeToPush, unsubscribeFromPush } from '../../lib/push';
 import { getCurrentUserId, signOutUser } from '../../lib/auth';
+import { toUI, toDb } from '../../lib/enums';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
 const PHOTO_SLOT_SIZE = Math.floor((SCREEN_W - 40 - 16) / 3); // 40 = 2×20 side padding, 16 = 2×8 gaps
 
 const AREAS = ['Bandra', 'Andheri', 'Powai', 'Malad', 'Goregaon', 'Thane', 'Navi Mumbai', 'Pune', 'Dadar', 'Kurla', 'Lower Parel', 'Worli'];
-const BUDGETS = ['₹5k–10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
+const BUDGETS = ['Under ₹10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
 
 // ─── Prompt library ───────────────────────────────────────────────────────────
 
@@ -245,11 +246,11 @@ function BasicInfoSheet({ visible, profile, onSave, onClose }) {
       if (!uid) return;
       const updates = {
         name: name.trim(),
-        gender,
+        gender: toDb('gender', gender),
         pronouns: pronouns.length ? pronouns : null,
-        drink: lifestyle.drink ?? null,
-        tobacco: lifestyle.tobacco ?? null,
-        weed: lifestyle.weed ?? null,
+        drink: lifestyle.drink ? toDb('lifestyle', lifestyle.drink) : null,
+        tobacco: lifestyle.tobacco ? toDb('lifestyle', lifestyle.tobacco) : null,
+        weed: lifestyle.weed ? toDb('lifestyle', lifestyle.weed) : null,
       };
       if (day && month && year) {
         updates.birthday = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -964,7 +965,8 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
     try {
       const uid = getCurrentUserId();
       if (!uid) return;
-      const { error } = await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
+      const updates = { budget: toDb('pref_budget', budget), preferred_areas: areas.length ? areas : null };
+      const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
       onSave({ budget, preferred_areas: areas.length ? areas : null });
     } catch (e) {
@@ -1093,7 +1095,16 @@ export default function Profile() {
           .select('id, name, birthday, gender, pronouns, drink, tobacco, weed, photos, preferred_areas, budget, prompts, onboarding_done, job_company, job_title, education_school, education_level, verified')
           .eq('id', uid)
           .single();
-        if (data) setProfile(data);
+        if (data) {
+          setProfile({
+            ...data,
+            gender: toUI('gender', data.gender),
+            drink: toUI('lifestyle', data.drink),
+            tobacco: toUI('lifestyle', data.tobacco),
+            weed: toUI('lifestyle', data.weed),
+            budget: toUI('pref_budget', data.budget),
+          });
+        }
         // Fetched separately and fail-soft so the profile screen still works
         // before the `paused` column exists (SUPABASE_SQL.md #17).
         const { data: flag, error: pausedErr } = await supabase

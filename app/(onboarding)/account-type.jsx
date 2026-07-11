@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getCurrentUserId } from '../../lib/auth';
+import { toDb } from '../../lib/enums';
 
 export default function AccountType() {
   const [type, setType] = useState(null);
@@ -24,7 +25,7 @@ export default function AccountType() {
       router.replace('/(auth)/login');
       return;
     }
-    const { error } = await supabase.from('profiles').update({ user_type: type }).eq('id', uid);
+    const { error } = await supabase.from('profiles').update({ user_type: toDb('user_type', type) }).eq('id', uid);
     if (error) { Alert.alert('Error', error.message); setLoading(false); return; }
     router.push('/(onboarding)/birthday');
     setLoading(false);

@@ -23,6 +23,7 @@ import PreferencesSheet, {
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
   getPrefDisplay, isPrefSet, savePrefsToSupabase,
 } from '../../components/PreferencesSheet';
+import { mapDbPrefsToUI, toUI } from '../../lib/enums';
 
 
 // ─── Filter chip config (top bar quick chips) ────────────────────────────────
@@ -251,7 +252,7 @@ function normaliseProfile(p) {
     area: Array.isArray(p.preferred_areas) ? p.preferred_areas[0] : null,
     preferred_areas: Array.isArray(p.preferred_areas) ? p.preferred_areas : [],
     budget: p.budget ?? null,
-    gender: p.gender ?? null,
+    gender: toUI('gender', p.gender),
     job: [p.job_title, p.job_company].filter(Boolean).join(' at ') || null,
     job_title: p.job_title ?? null,
     job_company: p.job_company ?? null,
@@ -259,8 +260,8 @@ function normaliseProfile(p) {
     education_level: p.education_level ?? null,
     flatPhoto: null, flatLabel: null,
     prompts: Array.isArray(p.prompts) ? p.prompts : [],
-    drink: p.drink ?? null,
-    tobacco: p.tobacco ?? null,
+    drink: toUI('lifestyle', p.drink),
+    tobacco: toUI('lifestyle', p.tobacco),
   };
 }
 
@@ -832,20 +833,7 @@ export default function Feed() {
       // a quick-focus-away-and-back can overwrite the just-applied local prefs
       // with the not-yet-updated DB row.
       if (me && !savingPrefsRef.current) {
-        const next = {
-          role:       me.pref_role       ?? null,
-          areas:      me.pref_areas      ?? [],
-          flatType:   me.pref_flat_type  ?? [],
-          budget:     me.pref_budget     ?? null,
-          moveIn:     me.pref_move_in    ?? null,
-          gender:     me.pref_gender     ?? null,
-          age:        me.pref_age        ?? null,
-          occupation: me.pref_occupation ?? [],
-          food:       me.pref_food       ?? [],
-          smoking:    me.pref_smoking    ?? null,
-          drinking:   me.pref_drinking   ?? null,
-          pets:       me.pref_pets       ?? [],
-        };
+        const next = mapDbPrefsToUI(me) ?? INIT_PREFS;
         // Only touch state (and rebuild the deck) when prefs actually changed —
         // e.g. saved from the Likes screen. A plain tab switch must not reset
         // the user's position in the deck.
@@ -875,20 +863,7 @@ export default function Feed() {
             name: me.name ?? 'You',
             photo: Array.isArray(me.photos) ? me.photos[0] ?? null : null,
           };
-          currentPrefs = {
-            role:       me.pref_role     ?? null,
-            areas:      me.pref_areas    ?? [],
-            flatType:   me.pref_flat_type  ?? [],
-            budget:     me.pref_budget   ?? null,
-            moveIn:     me.pref_move_in  ?? null,
-            gender:     me.pref_gender   ?? null,
-            age:        me.pref_age      ?? null,
-            occupation: me.pref_occupation ?? [],
-            food:       me.pref_food     ?? [],
-            smoking:    me.pref_smoking  ?? null,
-            drinking:   me.pref_drinking ?? null,
-            pets:       me.pref_pets     ?? [],
-          };
+          currentPrefs = mapDbPrefsToUI(me) ?? INIT_PREFS;
           setPrefs(currentPrefs);
           const anySet = Object.values(currentPrefs).some(v => Array.isArray(v) ? v.length > 0 : !!v);
           if (anySet) setBannerDismissed(true);

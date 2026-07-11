@@ -15,6 +15,7 @@ import { colors } from '../../lib/theme';
 import { getBlockedIds, blockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import PreferencesSheet, { INIT_PREFS, savePrefsToSupabase } from '../../components/PreferencesSheet';
+import { mapDbPrefsToUI } from '../../lib/enums';
 import MatchCelebration from '../../components/MatchCelebration';
 import ReportSheet from '../../components/ReportSheet';
 import { LikesSkeleton } from '../../components/Skeleton';
@@ -274,20 +275,7 @@ export default function Likes() {
 
         if (likesData) setLikes(likesData.filter(l => !blockedIds.has(l.from_user_id) && !matchedIds.has(l.from_user_id)));
         if (me) {
-          setPrefs({
-            role:       me.pref_role       ?? null,
-            areas:      me.pref_areas      ?? [],
-            flatType:   me.pref_flat_type  ?? [],
-            budget:     me.pref_budget     ?? null,
-            moveIn:     me.pref_move_in    ?? null,
-            gender:     me.pref_gender     ?? null,
-            age:        me.pref_age        ?? null,
-            occupation: me.pref_occupation ?? [],
-            food:       me.pref_food       ?? [],
-            smoking:    me.pref_smoking    ?? null,
-            drinking:   me.pref_drinking   ?? null,
-            pets:       me.pref_pets       ?? [],
-          });
+          setPrefs(mapDbPrefsToUI(me) ?? INIT_PREFS);
         }
       } catch (_) {}
       finally {

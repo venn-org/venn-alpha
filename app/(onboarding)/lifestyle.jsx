@@ -7,6 +7,7 @@ import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getCurrentUserId } from '../../lib/auth';
+import { toDb } from '../../lib/enums';
 
 const QUESTIONS = [
   { key: 'drink', label: 'Drinking' },
@@ -30,9 +31,9 @@ export default function Lifestyle() {
     const uid = getCurrentUserId();
     if (!uid) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const { error } = await supabase.from('profiles').update({
-      drink: answers.drink ?? null,
-      tobacco: answers.tobacco ?? null,
-      weed: answers.weed ?? null,
+      drink: answers.drink ? toDb('lifestyle', answers.drink) : null,
+      tobacco: answers.tobacco ? toDb('lifestyle', answers.tobacco) : null,
+      weed: answers.weed ? toDb('lifestyle', answers.weed) : null,
     }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/preferences');
