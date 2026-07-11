@@ -46,7 +46,6 @@ export default function Messages() {
       if (!hasLoadedOnce.current) setLoading(true);
       try {
         const uid = getCurrentUserId();
-        const uid = uid;
         if (!uid) {
           setNewMatches([]); setYourTurn([]); setTheirTurn([]);
           return;

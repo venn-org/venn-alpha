@@ -250,7 +250,6 @@ export default function Likes() {
   const loadLikes = useCallback(async () => {
       try {
         const uid = getCurrentUserId();
-        const uid = uid;
         if (!uid) return;
 
         const [{ data: likesData }, { data: me }, blockedIds, { data: matchRows }] = await Promise.all([
@@ -320,7 +319,6 @@ export default function Likes() {
     setSelected(null);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const { error: likeError } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: like.from_user_id });
       // Already liked (unique constraint) — fall through to the match check below.
@@ -340,7 +338,6 @@ export default function Likes() {
     setSelected(null);
     setLikes(prev => prev.filter(l => l.id !== like.id));
     const uid = getCurrentUserId();
-    const uid = uid;
     if (!uid) return;
     const { error } = await blockUser(uid, like.from_user_id);
     if (error) Alert.alert('Could not block', error.message);

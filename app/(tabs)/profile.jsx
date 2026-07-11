@@ -242,7 +242,6 @@ function BasicInfoSheet({ visible, profile, onSave, onClose }) {
     setSaving(true);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const updates = {
         name: name.trim(),
@@ -379,7 +378,6 @@ function BlockListSheet({ visible, onClose }) {
     setLoading(true);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       const profiles = await getBlockedProfiles(uid);
       setBlocked(profiles);
     } catch (_) {
@@ -399,7 +397,6 @@ function BlockListSheet({ visible, onClose }) {
   async function unblock(target) {
     setBlocked(prev => prev.filter(p => p.id !== target.id));
     const uid = getCurrentUserId();
-    const uid = uid;
     if (!uid) return;
     await unblockUser(uid, target.id);
   }
@@ -491,7 +488,6 @@ function WorkEduSheet({ visible, profile, onSave, onClose }) {
     setSaving(true);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('profiles').update({
         job_company: company.trim() || null,
@@ -967,7 +963,6 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
     setSaving(true);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
@@ -1092,7 +1087,6 @@ export default function Profile() {
     async function load() {
       try {
         const uid = getCurrentUserId();
-        const uid = uid;
         if (!uid) return;
         const { data } = await supabase
           .from('profiles')
@@ -1119,7 +1113,6 @@ export default function Profile() {
   async function togglePause(next) {
     setPaused(next);
     const uid = getCurrentUserId();
-    const uid = uid;
     if (!uid) return;
     const { error } = await supabase.from('profiles').update({ paused: next }).eq('id', uid);
     if (error) {
@@ -1136,7 +1129,6 @@ export default function Profile() {
     }
 
     const uid = getCurrentUserId();
-    const uid = uid;
     if (!uid) { setPushEnabled(false); return; }
 
     const { error } = await subscribeToPush(uid);
@@ -1177,7 +1169,6 @@ export default function Profile() {
     setUploadingIndex(index);
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       const lastSegment = asset.uri.split('?')[0].split('/').pop() || '';
       const dotIndex = lastSegment.lastIndexOf('.');
       const ext = dotIndex > 0 && dotIndex < lastSegment.length - 1 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';

@@ -20,7 +20,6 @@ function getExtension(uri) {
 
 async function uploadToStorage(uri) {
   const uid = getCurrentUserId();
-  const uid = uid;
   if (!uid) throw new Error('Not signed in');
   const ext = getExtension(uri);
   const path = `${uid}/${Date.now()}.${ext}`;
@@ -98,7 +97,6 @@ export default function Photos() {
     if (photos.length > 0) {
       try {
         const uid = getCurrentUserId();
-        const uid = uid;
         if (uid) {
           const { error } = await supabase.from('profiles').update({ photos }).eq('id', uid);
           if (error) throw error;

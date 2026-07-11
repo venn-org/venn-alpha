@@ -241,7 +241,6 @@ export default function Standouts() {
     if (!keyTargetId || keyTargetDemo) return;
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: keyTargetId, comment: keyNote || null });
       // Already sent a Key to this person (unique constraint) — not an error.
@@ -272,7 +271,6 @@ export default function Standouts() {
     setProfiles(prev => prev.filter(p => p.id !== target.id));
     if (!target?.id || target._demo) return;
     const uid = getCurrentUserId();
-    const uid = uid;
     if (!uid) return;
     const { error } = await blockUser(uid, target.id);
     if (error) Alert.alert('Could not block', error.message);

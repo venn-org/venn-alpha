@@ -87,7 +87,7 @@ export default function Chat() {
     async function load() {
       try {
         const uid = getCurrentUserId();
-        uid = uid;
+        
         uidRef.current = uid;
 
         const { data: matchRow } = await supabase
@@ -334,7 +334,6 @@ export default function Chat() {
     if (!matchId) return;
     try {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid) throw new Error('Not signed in');
       const { data: inserted, error } = await supabase.from('messages')
         .insert({ match_id: matchId, sender_id: uid, content: trimmed })

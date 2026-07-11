@@ -49,7 +49,6 @@ export default function TabsLayout() {
 
     async function init() {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (!uid || cancelled) return;
       uidRef.current = uid;
       await refresh();

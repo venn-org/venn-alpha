@@ -78,7 +78,6 @@ export default function Notifications() {
     async function load() {
       try {
         const uid = getCurrentUserId();
-        const uid = uid;
         if (!uid) return;
         setNotifs(await getNotifications(uid));
       } catch (_) {}
@@ -92,7 +91,6 @@ export default function Notifications() {
   async function handleMarkAllRead() {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
     const uid = getCurrentUserId();
-    const uid = uid;
     if (uid) await markAllRead(uid);
   }
 
@@ -100,7 +98,6 @@ export default function Notifications() {
     setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
     if (!n.read) {
       const uid = getCurrentUserId();
-      const uid = uid;
       if (uid) markRead(uid, n.id);
     }
     if ((n.type === 'match' || n.type === 'message') && n.matchId) {
