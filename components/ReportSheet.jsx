@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
+import { getCurrentUserId } from '../lib/auth';
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -50,8 +51,8 @@ export default function ReportSheet({ visible, targetId, targetName, onClose, on
     if (!reason || !targetId) return;
     setSubmitting(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('reports').insert({
         reporter_id: uid,

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../lib/theme';
-import { enterWithoutAuth } from '../../lib/directAuth';
+import { signInWithGoogle, ensureProfile, isOnboardingComplete } from '../../lib/auth';
 
 export default function SignIn() {
   const [loading, setLoading] = useState(false);
@@ -21,17 +21,20 @@ export default function SignIn() {
     ]).start();
   }, []);
 
-  async function handleDirectEntry() {
+  async function handleGoogleSignIn() {
     if (loading) return;
     setLoading(true);
-    const { error } = await enterWithoutAuth(router);
-    if (error) {
-      Alert.alert('Could not continue', error.message || 'Please try again.');
+    try {
+      await signInWithGoogle();
+      await ensureProfile();
+      const done = await isOnboardingComplete();
+      router.replace(done ? '/(tabs)/feed' : '/(onboarding)/name');
+    } catch (e) {
+      Alert.alert('Could not sign in', e.message || 'Please try again.');
+    } finally {
       setLoading(false);
     }
   }
-
-  const webLoading = Platform.OS === 'web' && loading;
 
   return (
     <View style={styles.frame}>
@@ -62,15 +65,32 @@ export default function SignIn() {
             </TouchableOpacity>
           )}
 
+          {Platform.OS === 'web' && (
+            <TouchableOpacity style={styles.phoneBtn} onPress={() => router.push('/(auth)/phone?mode=signin')} activeOpacity={0.9}>
+              <Text style={styles.phoneBtnIcon}>📞</Text>
+              <Text style={styles.phoneBtnText}>Sign in with phone</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
-            style={[styles.emailBtn, webLoading && styles.btnDisabled]}
-            onPress={Platform.OS === 'web' ? handleDirectEntry : () => router.push('/(auth)/email?mode=signin')}
-            disabled={webLoading}
+            style={styles.emailBtn}
+            onPress={() => router.push('/(auth)/email?mode=signin')}
             activeOpacity={0.85}
           >
             <Text style={styles.emailBtnIcon}>✉</Text>
-            <Text style={styles.emailBtnText}>{webLoading ? 'Opening Venn...' : Platform.OS === 'web' ? 'Sign in directly' : 'Sign in with email'}</Text>
+            <Text style={styles.emailBtnText}>Sign in with email</Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              style={[styles.googleBtn, loading && styles.btnDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.googleBtnText}>{loading ? 'Signing in…' : '🔵  Sign in with Google'}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </ImageBackground>
     </View>
@@ -102,5 +122,7 @@ const styles = StyleSheet.create({
   emailBtn: { borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
   emailBtnIcon: { fontSize: 16, color: '#fff' },
   emailBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  googleBtn: { borderRadius: 50, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
+  googleBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   btnDisabled: { opacity: 0.6 },
 });

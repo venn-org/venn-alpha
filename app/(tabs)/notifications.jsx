@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
 import { getNotifications, markAllRead, markRead } from '../../lib/notifications';
 import { NotifsSkeleton } from '../../components/Skeleton';
+import { getCurrentUserId } from '../../lib/auth';
 
 const NOTIF_META = {
   match:   { icon: 'heart',              bg: '#FFF0F3', color: '#FF4D6A' },
@@ -76,8 +77,8 @@ export default function Notifications() {
   useFocusEffect(useCallback(() => {
     async function load() {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
+        const uid = uid;
         if (!uid) return;
         setNotifs(await getNotifications(uid));
       } catch (_) {}
@@ -90,16 +91,16 @@ export default function Notifications() {
 
   async function handleMarkAllRead() {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
+    const uid = uid;
     if (uid) await markAllRead(uid);
   }
 
   async function handlePress(n) {
     setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
     if (!n.read) {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (uid) markRead(uid, n.id);
     }
     if ((n.type === 'match' || n.type === 'message') && n.matchId) {

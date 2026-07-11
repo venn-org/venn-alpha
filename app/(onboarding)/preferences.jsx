@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 const AREAS = ['Bandra', 'Andheri', 'Powai', 'Malad', 'Goregaon', 'Thane', 'Navi Mumbai', 'Pune', 'Dadar', 'Kurla', 'Lower Parel', 'Worli'];
 const BUDGETS = ['₹5k–10k', '₹10k–20k', '₹20k–35k', '₹35k–50k', '₹50k+'];
@@ -20,9 +21,9 @@ export default function Preferences() {
 
   useEffect(() => {
     async function loadUserType() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const uid = getCurrentUserId();
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('user_type').eq('id', user.id).single();
+      const { data } = await supabase.from('profiles').select('user_type').eq('id', uid).single();
       setUserType(data?.user_type ?? 'seeking');
     }
     loadUserType();
@@ -33,14 +34,14 @@ export default function Preferences() {
   }
 
   async function handleContinue() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const uid = getCurrentUserId();
     if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
     const updates = {
       preferred_areas: areas.length > 0 ? areas : null,
       budget: budget ?? null,
     };
     if (userType === 'owner' && flatType) updates.flat_type = flatType;
-    const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/photos');
   }

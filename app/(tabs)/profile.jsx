@@ -15,6 +15,7 @@ import { colors } from '../../lib/theme';
 import { getBlockedProfiles, unblockUser } from '../../lib/blocks';
 import { calcAge } from '../../lib/age';
 import { subscribeToPush, unsubscribeFromPush } from '../../lib/push';
+import { getCurrentUserId, signOutUser } from '../../lib/auth';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
@@ -240,8 +241,8 @@ function BasicInfoSheet({ visible, profile, onSave, onClose }) {
     setError('');
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const updates = {
         name: name.trim(),
@@ -377,8 +378,8 @@ function BlockListSheet({ visible, onClose }) {
   async function load() {
     setLoading(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       const profiles = await getBlockedProfiles(uid);
       setBlocked(profiles);
     } catch (_) {
@@ -397,8 +398,8 @@ function BlockListSheet({ visible, onClose }) {
 
   async function unblock(target) {
     setBlocked(prev => prev.filter(p => p.id !== target.id));
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
+    const uid = uid;
     if (!uid) return;
     await unblockUser(uid, target.id);
   }
@@ -489,8 +490,8 @@ function WorkEduSheet({ visible, profile, onSave, onClose }) {
   async function save() {
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('profiles').update({
         job_company: company.trim() || null,
@@ -965,8 +966,8 @@ function PreferencesSheet({ visible, profile, onSave, onClose }) {
   async function save() {
     setSaving(true);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('profiles').update({ budget, preferred_areas: areas.length ? areas : null }).eq('id', uid);
       if (error) { Alert.alert('Save failed', error.message); return; }
@@ -1090,8 +1091,8 @@ export default function Profile() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
+        const uid = uid;
         if (!uid) return;
         const { data } = await supabase
           .from('profiles')
@@ -1117,8 +1118,8 @@ export default function Profile() {
 
   async function togglePause(next) {
     setPaused(next);
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
+    const uid = uid;
     if (!uid) return;
     const { error } = await supabase.from('profiles').update({ paused: next }).eq('id', uid);
     if (error) {
@@ -1134,8 +1135,8 @@ export default function Profile() {
       return;
     }
 
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
+    const uid = uid;
     if (!uid) { setPushEnabled(false); return; }
 
     const { error } = await subscribeToPush(uid);
@@ -1163,7 +1164,7 @@ export default function Profile() {
     const { error } = await supabase.rpc('delete_account');
     if (error) { Alert.alert('Could not delete account', error.message); return; }
     // The user no longer exists server-side; clear the local session to land on login.
-    supabase.auth.signOut();
+    signOutUser();
   }
 
   async function pickPhoto(index) {
@@ -1175,8 +1176,8 @@ export default function Profile() {
     const asset = result.assets[0];
     setUploadingIndex(index);
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       const lastSegment = asset.uri.split('?')[0].split('/').pop() || '';
       const dotIndex = lastSegment.lastIndexOf('.');
       const ext = dotIndex > 0 && dotIndex < lastSegment.length - 1 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';
@@ -1207,7 +1208,7 @@ export default function Profile() {
   }
 
   async function savePrompt({ q, a }) {
-    const uid = (await supabase.auth.getUser()).data?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) { Alert.alert('Not signed in', 'Please sign in to save prompts.'); return; }
     const current = Array.isArray(profile?.prompts) ? [...profile.prompts] : [];
     let updated;
@@ -1225,7 +1226,7 @@ export default function Profile() {
   }
 
   async function deletePrompt() {
-    const uid = (await supabase.auth.getUser()).data?.user?.id;
+    const uid = getCurrentUserId();
     if (!uid) return;
     const updated = (profile?.prompts ?? []).filter(pr => pr.q !== editingPrompt?.q);
     const { error } = await supabase.from('profiles').update({ prompts: updated }).eq('id', uid);
@@ -1238,7 +1239,7 @@ export default function Profile() {
   function handleLogout() {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      { text: 'Log out', style: 'destructive', onPress: () => signOutUser() },
     ]);
   }
 

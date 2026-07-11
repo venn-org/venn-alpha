@@ -1,0 +1,12 @@
+{
+  "name": "venn-firebase-functions",
+  "description": "Firebase Cloud Functions for Venn Authentication to set Supabase custom claims",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "main": "index.js"
+}

@@ -12,6 +12,7 @@ import { getBlockedIds } from '../../lib/blocks';
 import { getUnreadCount } from '../../lib/notifications';
 import { isOnline } from '../../lib/presence';
 import { MessagesSkeleton } from '../../components/Skeleton';
+import { getCurrentUserId } from '../../lib/auth';
 
 function Avatar({ photo, name, size = 52, online = false }) {
   const initials = (name ?? '?')[0].toUpperCase();
@@ -44,8 +45,8 @@ export default function Messages() {
   const load = useCallback(async () => {
       if (!hasLoadedOnce.current) setLoading(true);
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
+        const uid = uid;
         if (!uid) {
           setNewMatches([]); setYourTurn([]); setTheirTurn([]);
           return;

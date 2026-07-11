@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 export default function Name() {
   const [first, setFirst] = useState('');
@@ -15,7 +16,7 @@ export default function Name() {
 
   async function handleContinue() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const uid = getCurrentUserId();
     if (!user) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
@@ -24,7 +25,7 @@ export default function Name() {
     }
     const { error } = await supabase.from('profiles').update({
       name: last.trim() ? `${first.trim()} ${last.trim()}` : first.trim(),
-    }).eq('id', user.id);
+    }).eq('id', uid);
     if (error) Alert.alert('Error', error.message);
     else router.push('/(onboarding)/account-type');
     setLoading(false);

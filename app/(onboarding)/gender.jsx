@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 const OPTIONS = ['Man', 'Woman', 'Non-binary', 'Prefer not to say'];
 
@@ -16,9 +17,9 @@ export default function Gender() {
 
   async function handleNext() {
     if (!selected) return;
-    const { data: { user } } = await supabase.auth.getUser();
+    const uid = getCurrentUserId();
     if (!user) { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/(auth)/login'); return; }
-    const { error } = await supabase.from('profiles').update({ gender: selected }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ gender: selected }).eq('id', uid);
     if (error) { Alert.alert('Save failed', error.message); return; }
     router.push('/(onboarding)/lifestyle');
   }

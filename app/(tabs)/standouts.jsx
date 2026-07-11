@@ -12,6 +12,7 @@ import { getBlockedIds, blockUser } from '../../lib/blocks';
 import { getPausedIds } from '../../lib/paused';
 import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
+import { getCurrentUserId } from '../../lib/auth';
 
 const SW = Dimensions.get('window').width;
 
@@ -181,17 +182,17 @@ export default function Standouts() {
   useEffect(() => {
     async function loadOwners() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const uid = getCurrentUserId();
         if (!user) return;
         const [{ data }, blockedIds, pausedIds] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, name, birthday, gender, verified, preferred_areas, budget, flat_type, photos')
-            .neq('id', user.id)
+            .neq('id', uid)
             .eq('onboarding_done', true)
             .eq('user_type', 'owner')
             .limit(20),
-          getBlockedIds(user.id),
+          getBlockedIds(uid),
           getPausedIds(),
         ]);
         if (data && data.length > 0) {
@@ -239,8 +240,8 @@ export default function Standouts() {
     setShowKeySheet(false);
     if (!keyTargetId || keyTargetDemo) return;
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const { error } = await supabase.from('likes').insert({ from_user_id: uid, to_user_id: keyTargetId, comment: keyNote || null });
       // Already sent a Key to this person (unique constraint) — not an error.
@@ -270,8 +271,8 @@ export default function Standouts() {
   async function handleBlock(target) {
     setProfiles(prev => prev.filter(p => p.id !== target.id));
     if (!target?.id || target._demo) return;
-    const { data: authData } = await supabase.auth.getUser();
-    const uid = authData?.user?.id;
+    const uid = getCurrentUserId();
+    const uid = uid;
     if (!uid) return;
     const { error } = await blockUser(uid, target.id);
     if (error) Alert.alert('Could not block', error.message);

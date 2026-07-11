@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 export default function AccountType() {
   const [type, setType] = useState(null);
@@ -16,14 +17,14 @@ export default function AccountType() {
   async function handleContinue() {
     if (!type) return;
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const uid = getCurrentUserId();
     if (!user) {
       setLoading(false);
       Alert.alert('Session expired', 'Please sign in again.');
       router.replace('/(auth)/login');
       return;
     }
-    const { error } = await supabase.from('profiles').update({ user_type: type }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ user_type: type }).eq('id', uid);
     if (error) { Alert.alert('Error', error.message); setLoading(false); return; }
     router.push('/(onboarding)/birthday');
     setLoading(false);

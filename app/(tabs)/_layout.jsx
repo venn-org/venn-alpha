@@ -5,6 +5,7 @@ import { Platform, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../lib/theme';
 import { supabase } from '../../lib/supabase';
+import { getCurrentUserId } from '../../lib/auth';
 
 function TabIcon({ name, size, color, showDot }) {
   return (
@@ -47,8 +48,8 @@ export default function TabsLayout() {
     }
 
     async function init() {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid || cancelled) return;
       uidRef.current = uid;
       await refresh();

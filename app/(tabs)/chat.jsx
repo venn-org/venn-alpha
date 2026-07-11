@@ -15,6 +15,7 @@ import { unmatchUser, clearChat } from '../../lib/matches';
 import ReportSheet from '../../components/ReportSheet';
 import ProfileViewSheet from '../../components/ProfileViewSheet';
 import { ChatSkeleton } from '../../components/Skeleton';
+import { getCurrentUserId } from '../../lib/auth';
 
 const PAGE_SIZE = 30;
 
@@ -85,8 +86,8 @@ export default function Chat() {
 
     async function load() {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        uid = authData?.user?.id;
+        const uid = getCurrentUserId();
+        uid = uid;
         uidRef.current = uid;
 
         const { data: matchRow } = await supabase
@@ -332,8 +333,8 @@ export default function Chat() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     if (!matchId) return;
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) throw new Error('Not signed in');
       const { data: inserted, error } = await supabase.from('messages')
         .insert({ match_id: matchId, sender_id: uid, content: trimmed })

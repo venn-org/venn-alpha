@@ -19,6 +19,7 @@ import { calcAge } from '../../lib/age';
 import ReportSheet from '../../components/ReportSheet';
 import { FeedSkeleton } from '../../components/Skeleton';
 import PreferencesSheet, {
+import { getCurrentUserId } from '../../lib/auth';
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
   getPrefDisplay, isPrefSet, savePrefsToSupabase,
 } from '../../components/PreferencesSheet';
@@ -812,8 +813,8 @@ export default function Feed() {
 
   useFocusEffect(useCallback(() => {
     async function reloadPrefs() {
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const uid = getCurrentUserId();
+      const uid = uid;
       if (!uid) return;
       const { data: me } = await supabase
         .from('profiles')
@@ -860,8 +861,8 @@ export default function Feed() {
 
   async function loadFeed() {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id ?? '';
+        const uid = getCurrentUserId();
+        const uid = uid ?? '';
         uidRef.current = uid;
 
         // Load this user's saved preferences

@@ -1,5 +1,5 @@
 import '../lib/alert'; // patches react-native-web's no-op Alert.alert — must load before any screen
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
@@ -7,17 +7,21 @@ import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, HankenGrotesk_700Bold } from '@expo-google-fonts/hanken-grotesk';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SpeedInsights } from '@vercel/speed-insights/react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { supabase } from '../lib/supabase';
+import { ensureProfile, completeEmailLink } from '../lib/auth';
 import { registerServiceWorker } from '../lib/push';
 import MatchCelebration from '../components/MatchCelebration';
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
-  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null); // Firebase user (or null)
   const [profileComplete, setProfileComplete] = useState(false);
   const [incomingMatch, setIncomingMatch] = useState(null);
   const segments = useSegments();
   const router = useRouter();
+  const initialised = useRef(false);
 
   useFonts({
     SpaceGrotesk_600SemiBold,
@@ -34,54 +38,52 @@ export default function RootLayout() {
     if (Platform.OS === 'web') registerServiceWorker();
   }, []);
 
+  // Handle email sign-in links on web (user clicked magic link in their inbox)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    if (url) {
+      completeEmailLink(url).catch(() => { /* not a sign-in link, ignore */ });
+    }
+  }, []);
+
+  // Firebase auth state listener — replaces supabase.auth.onAuthStateChange
   useEffect(() => {
     const fallback = setTimeout(() => setReady(true), 3000);
 
-    supabase.auth.getSession().then(({ data }) => {
-      const s = data?.session ?? null;
-      setSession(s);
-      if (!s) {
-        clearTimeout(fallback);
-        setReady(true);
-        return;
-      }
-      supabase.from('profiles')
-        .select('onboarding_done')
-        .eq('id', s.user.id)
-        .single()
-        .then(({ data: p }) => {
-          setProfileComplete(!!p?.onboarding_done);
-          clearTimeout(fallback);
-          setReady(true);
-        })
-        .catch(() => setReady(true));
-    }).catch(() => {
-      clearTimeout(fallback);
-      setReady(true);
-    });
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
-      if (s) {
-        // Set session immediately, before awaiting the profile check — otherwise
-        // a screen that navigates right after its own successful auth call (e.g.
-        // the OTP screens) can change `segments` while `session` here is still
-        // null, and the redirect effect below bounces the user back to /login.
-        setSession(s);
-        const { data: p } = await supabase.from('profiles').select('onboarding_done').eq('id', s.user.id).single();
+        // Ensure profile row exists in Supabase
+        await ensureProfile();
+
+        // Check onboarding status
+        const { data: p } = await supabase
+          .from('profiles')
+          .select('onboarding_done')
+          .eq('id', firebaseUser.uid)
+          .single();
         setProfileComplete(!!p?.onboarding_done);
       } else {
-        setSession(null);
+        setUser(null);
         setProfileComplete(false);
+      }
+
+      if (!initialised.current) {
+        clearTimeout(fallback);
+        setReady(true);
+        initialised.current = true;
       }
     });
 
-    return () => { subscription.unsubscribe(); clearTimeout(fallback); };
+    return () => { unsubscribe(); clearTimeout(fallback); };
   }, []);
 
   // Realtime: show match celebration when someone likes us back
   useEffect(() => {
-    if (!session) return;
-    const uid = session.user.id;
+    if (!user) return;
+    const uid = user.uid;
 
     const channel = supabase
       .channel(`match-notify-${uid}`)
@@ -115,13 +117,13 @@ export default function RootLayout() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [session]);
+  }, [user]);
 
   // Heartbeat: keep profiles.last_active_at fresh while the app is open,
   // so other users can see an accurate "Active now" / "Active Xm ago" status.
   useEffect(() => {
-    if (!session) return;
-    const uid = session.user.id;
+    if (!user) return;
+    const uid = user.uid;
 
     async function ping() {
       await supabase.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', uid);
@@ -129,7 +131,7 @@ export default function RootLayout() {
     ping();
     const interval = setInterval(ping, 60000);
     return () => clearInterval(interval);
-  }, [session]);
+  }, [user]);
 
   useEffect(() => {
     if (!ready) return;
@@ -137,7 +139,7 @@ export default function RootLayout() {
     const inOnboarding = segments[0] === '(onboarding)';
     const inTabs = segments[0] === '(tabs)';
 
-    if (!session) {
+    if (!user) {
       if (!inAuth) router.replace('/(auth)/login');
       return;
     }
@@ -148,7 +150,7 @@ export default function RootLayout() {
     }
 
     if (inTabs) {
-      supabase.from('profiles').select('onboarding_done').eq('id', session.user.id).single()
+      supabase.from('profiles').select('onboarding_done').eq('id', user.uid).single()
         .then(({ data: p }) => {
           if (p?.onboarding_done) {
             setProfileComplete(true);
@@ -160,7 +162,7 @@ export default function RootLayout() {
     } else if (!inOnboarding) {
       router.replace('/(onboarding)/name');
     }
-  }, [ready, session, profileComplete, segments]);
+  }, [ready, user, profileComplete, segments]);
 
   return (
     <>

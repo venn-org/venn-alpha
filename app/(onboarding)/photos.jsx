@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import OnboardingShell from '../../components/OnboardingShell';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/theme';
+import { getCurrentUserId } from '../../lib/auth';
 
 function getExtension(uri) {
   const lastSegment = uri.split('?')[0].split('/').pop() || '';
@@ -18,8 +19,8 @@ function getExtension(uri) {
 }
 
 async function uploadToStorage(uri) {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData?.user?.id;
+  const uid = getCurrentUserId();
+  const uid = uid;
   if (!uid) throw new Error('Not signed in');
   const ext = getExtension(uri);
   const path = `${uid}/${Date.now()}.${ext}`;
@@ -51,9 +52,9 @@ export default function Photos() {
 
   useEffect(() => {
     async function loadUserType() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const uid = getCurrentUserId();
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('user_type').eq('id', user.id).single();
+      const { data } = await supabase.from('profiles').select('user_type').eq('id', uid).single();
       setUserType(data?.user_type ?? 'seeking');
     }
     loadUserType();
@@ -96,8 +97,8 @@ export default function Photos() {
       : [profilePhoto, ...extraPhotos].filter(Boolean);
     if (photos.length > 0) {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const uid = authData?.user?.id;
+        const uid = getCurrentUserId();
+        const uid = uid;
         if (uid) {
           const { error } = await supabase.from('profiles').update({ photos }).eq('id', uid);
           if (error) throw error;
