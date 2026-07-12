@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
   RefreshControl,
@@ -112,6 +112,24 @@ export default function Messages() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  useEffect(() => {
+    const uid = getCurrentUserId();
+    if (!uid) return;
+    const channel = supabase
+      .channel(`messages-tab-${uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        load();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => {
+        load();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
 
   async function onRefresh() {
     setRefreshing(true);
