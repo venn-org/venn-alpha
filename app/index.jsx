@@ -1,6 +1,17 @@
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function Index() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.replace('/(auth)/login');
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <View style={styles.container}>
       <View style={styles.logoWrap}>
