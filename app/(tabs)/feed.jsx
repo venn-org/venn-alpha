@@ -23,7 +23,7 @@ import PreferencesSheet, {
   AREA_GROUPS, ALL_PREDEFINED_AREAS, PREF_SECTIONS, VENN_PLUS_ROWS, INIT_PREFS,
   getPrefDisplay, isPrefSet, savePrefsToSupabase,
 } from '../../components/PreferencesSheet';
-import { mapDbPrefsToUI, toUI } from '../../lib/enums';
+import { mapDbPrefsToUI, toUI, toDb } from '../../lib/enums';
 
 
 // ─── Filter chip config (top bar quick chips) ────────────────────────────────
@@ -199,6 +199,20 @@ const priyaPhoto = require('../../assets/priya.webp');
 const DEMO = [
   {
     id: 'd1',
+    name: 'Arjun', overlap: 74, age: 26, pronouns: 'he/him',
+    verified: false, active: 'Active 2h ago',
+    photo: 'https://i.pravatar.cc/700?img=11',
+    area: 'Bandra', gender: 'Man', job: 'Software Engineer at Zepto',
+    flatPhoto: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80',
+    flatLabel: 'Their flat · Bandra West',
+    prompts: [
+      { q: "You'll know we're compatible if", a: 'you also leave appliances on standby and feel guilty about it' },
+      { q: 'My go-to Sunday plan', a: 'brunch somewhere good, then absolutely nothing', accent: true },
+    ],
+    _demo: true,
+  },
+  {
+    id: 'd2',
     name: 'Priya', overlap: 87, age: 24, pronouns: 'she/her',
     verified: true, active: 'Active today',
     photo: null, localPhoto: priyaPhoto,
@@ -209,20 +223,6 @@ const DEMO = [
       { q: 'My ideal noise level at home is', a: 'chill background music, never dead silent' },
       { q: 'I handle shared chores by', a: 'making a rota nobody actually sticks to, then doing it myself anyway' },
       { q: 'My room aesthetic is', a: 'organised chaos with very good lighting', accent: true },
-    ],
-    _demo: true,
-  },
-  {
-    id: 'd2',
-    name: 'Arjun', overlap: 74, age: 26, pronouns: 'he/him',
-    verified: false, active: 'Active 2h ago',
-    photo: 'https://i.pravatar.cc/700?img=11',
-    area: 'Bandra', gender: 'Man', job: 'Software Engineer at Zepto',
-    flatPhoto: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80',
-    flatLabel: 'Their flat · Bandra West',
-    prompts: [
-      { q: "You'll know we're compatible if", a: 'you also leave appliances on standby and feel guilty about it' },
-      { q: 'My go-to Sunday plan', a: 'brunch somewhere good, then absolutely nothing', accent: true },
     ],
     _demo: true,
   },
@@ -262,6 +262,7 @@ function normaliseProfile(p) {
     prompts: Array.isArray(p.prompts) ? p.prompts : [],
     drink: toUI('lifestyle', p.drink),
     tobacco: toUI('lifestyle', p.tobacco),
+    flatType: toUI('flat_type', p.flat_type),
   };
 }
 
@@ -321,6 +322,11 @@ function scoreProfile(profile, prefs) {
   if (prefs.drinking && prefs.drinking.includes('Teetotaller')) {
     total++;
     if (!profile.drink || profile.drink === 'No' || profile.drink === 'Prefer not to say') matched++;
+  }
+
+  if (prefs.flatType && prefs.flatType.length > 0) {
+    total++;
+    if (!profile.flatType || prefs.flatType.includes(profile.flatType)) matched++;
   }
 
   if (total === 0) return 100;
@@ -652,7 +658,7 @@ export default function Feed() {
   const router = useRouter();
   // Demo profiles are a dev-only preview deck; in production an empty feed
   // shows the honest "no profiles yet" state instead of fake people.
-  const [profiles, setProfiles] = useState(__DEV__ ? DEMO : []);
+  const [profiles, setProfiles] = useState([]);
   const [idx, setIdx] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -885,6 +891,9 @@ export default function Feed() {
           rawProfilesRef.current = normed;
           skippedRef.current = [];
           setProfiles(buildDeck(normed, currentPrefs));
+          setIdx(0);
+        } else if (__DEV__) {
+          setProfiles(DEMO);
           setIdx(0);
         }
       } catch (_) {
