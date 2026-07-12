@@ -270,7 +270,7 @@ export default function Chat() {
     if (!matchId) return;
     const { error } = await unmatchUser(matchId, uidRef.current, otherIdRef.current);
     if (error) { Alert.alert('Could not unmatch', error.message); return; }
-    router.back();
+    router.navigate('/(tabs)/messages');
   }
 
   function confirmBlock() {
@@ -294,7 +294,7 @@ export default function Chat() {
     if (!uid || !otherId) return;
     const { error } = await blockUser(uid, otherId);
     if (error) { Alert.alert('Could not block', error.message); return; }
-    router.back();
+    router.navigate('/(tabs)/messages');
   }
 
   function handleTextChange(v) {
@@ -351,7 +351,7 @@ export default function Chat() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
       <View style={[s.screen, { paddingTop: insets.top }]}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => router.navigate('/(tabs)/messages')} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="chevron-back" size={20} color={colors.ink} />
           </TouchableOpacity>
           <TouchableOpacity
