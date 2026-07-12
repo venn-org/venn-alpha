@@ -70,7 +70,8 @@ CREATE TABLE public.matches (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT matches_pkey PRIMARY KEY (id),
   CONSTRAINT matches_user1_id_fkey FOREIGN KEY (user1_id) REFERENCES public.profiles(id),
-  CONSTRAINT matches_user2_id_fkey FOREIGN KEY (user2_id) REFERENCES public.profiles(id)
+  CONSTRAINT matches_user2_id_fkey FOREIGN KEY (user2_id) REFERENCES public.profiles(id),
+  CONSTRAINT matches_user1_user2_unique UNIQUE (user1_id, user2_id)
 );
 CREATE TABLE public.messages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -91,7 +92,8 @@ CREATE TABLE public.likes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT likes_pkey PRIMARY KEY (id),
   CONSTRAINT likes_from_user_id_fkey FOREIGN KEY (from_user_id) REFERENCES public.profiles(id),
-  CONSTRAINT likes_to_user_id_fkey FOREIGN KEY (to_user_id) REFERENCES public.profiles(id)
+  CONSTRAINT likes_to_user_id_fkey FOREIGN KEY (to_user_id) REFERENCES public.profiles(id),
+  CONSTRAINT likes_from_to_unique UNIQUE (from_user_id, to_user_id)
 );
 CREATE TABLE public.reports (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -314,3 +316,70 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE EXECUTE ON FUNCTION delete_account() FROM anon, public;
 GRANT EXECUTE ON FUNCTION delete_account() TO authenticated;
+
+-- ==========================================
+-- AUTO-MATCH & NOTIFICATION TRIGGERS
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION create_match_on_mutual_like()
+RETURNS TRIGGER AS $$
+DECLARE
+  m_id uuid;
+BEGIN
+  -- Check if the person being liked has already liked back
+  IF EXISTS (
+    SELECT 1 FROM public.likes
+    WHERE from_user_id = NEW.to_user_id
+      AND to_user_id   = NEW.from_user_id
+  ) THEN
+    -- Insert a match (use least/greatest so (A,B) and (B,A) produce same row)
+    INSERT INTO public.matches (user1_id, user2_id)
+    VALUES (LEAST(NEW.from_user_id, NEW.to_user_id), GREATEST(NEW.from_user_id, NEW.to_user_id))
+    ON CONFLICT (user1_id, user2_id) DO NOTHING
+    RETURNING id INTO m_id;
+
+    IF m_id IS NULL THEN
+      SELECT id INTO m_id FROM public.matches
+        WHERE user1_id = LEAST(NEW.from_user_id, NEW.to_user_id)
+          AND user2_id = GREATEST(NEW.from_user_id, NEW.to_user_id);
+    END IF;
+
+    INSERT INTO public.notifications (user_id, type, actor_id, match_id)
+    VALUES (NEW.to_user_id, 'match', NEW.from_user_id, m_id);
+    INSERT INTO public.notifications (user_id, type, actor_id, match_id)
+    VALUES (NEW.from_user_id, 'match', NEW.to_user_id, m_id);
+  ELSE
+    -- One-way like — notify the recipient only
+    INSERT INTO public.notifications (user_id, type, actor_id)
+    VALUES (NEW.to_user_id, 'like', NEW.from_user_id);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_mutual_like ON public.likes;
+CREATE TRIGGER trg_mutual_like
+  AFTER INSERT ON public.likes
+  FOR EACH ROW EXECUTE FUNCTION create_match_on_mutual_like();
+
+CREATE OR REPLACE FUNCTION notify_on_message()
+RETURNS TRIGGER AS $$
+DECLARE
+  recipient text;
+BEGIN
+  SELECT CASE WHEN user1_id = NEW.sender_id THEN user2_id ELSE user1_id END
+    INTO recipient
+  FROM public.matches WHERE id = NEW.match_id;
+
+  IF recipient IS NOT NULL THEN
+    INSERT INTO public.notifications (user_id, type, actor_id, match_id, content)
+    VALUES (recipient, 'message', NEW.sender_id, NEW.match_id, NEW.content);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_notify_message ON public.messages;
+CREATE TRIGGER trg_notify_message
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION notify_on_message();

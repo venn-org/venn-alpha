@@ -875,7 +875,7 @@ export default function Feed() {
           if (anySet) setBannerDismissed(true);
         }
 
-        const [{ data }, blockedIds, pausedIds] = await Promise.all([
+        const [{ data }, blockedIds, pausedIds, { data: myLikes }] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, name, birthday, gender, pronouns, verified, preferred_areas, budget, photos, prompts, job_title, job_company, education_school, education_level, drink, tobacco')
@@ -885,8 +885,12 @@ export default function Feed() {
             .limit(100),
           getBlockedIds(uid),
           getPausedIds(),
+          supabase.from('likes').select('to_user_id').eq('from_user_id', uid)
         ]);
         if (data && data.length > 0) {
+          if (myLikes) {
+            myLikes.forEach(l => likedIdsRef.current.add(l.to_user_id));
+          }
           const normed = data.filter(p => !blockedIds.has(p.id) && !pausedIds.has(p.id)).map(normaliseProfile);
           rawProfilesRef.current = normed;
           skippedRef.current = [];
