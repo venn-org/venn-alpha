@@ -7,21 +7,29 @@ import { colors } from '../../lib/theme';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUserId } from '../../lib/auth';
 
-function TabIcon({ name, size, color, showDot }) {
+function TabIcon({ name, size, color, count }) {
   return (
     <View>
       <Ionicons name={name} size={size} color={color} />
-      {showDot && <View style={dotStyles.dot} />}
+      {count > 0 && (
+        <View style={dotStyles.badge}>
+          <Text style={dotStyles.badgeText}>{count > 4 ? '4+' : count}</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const dotStyles = StyleSheet.create({
-  dot: {
-    position: 'absolute', top: -1, right: -3,
-    width: 9, height: 9, borderRadius: 4.5,
+  badge: {
+    position: 'absolute', top: -4, right: -8,
+    minWidth: 16, height: 16, borderRadius: 8,
     backgroundColor: '#FF4D6A', borderWidth: 1.5, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
   },
+  badgeText: {
+    fontFamily: 'HankenGrotesk_700Bold', fontSize: 9, color: '#fff',
+  }
 });
 
 export default function TabsLayout() {
@@ -124,7 +132,7 @@ export default function TabsLayout() {
               name={focused ? 'heart' : 'heart-outline'}
               size={22}
               color={color}
-              showDot={unreadLikes > 0}
+              count={unreadLikes}
             />
           ),
         }}
@@ -138,7 +146,7 @@ export default function TabsLayout() {
               name={focused ? 'chatbubble' : 'chatbubble-outline'}
               size={22}
               color={color}
-              showDot={unreadMessages > 0}
+              count={unreadMessages}
             />
           ),
         }}
