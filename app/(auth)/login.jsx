@@ -61,7 +61,6 @@ export default function Login() {
           <Text style={styles.appName}>Venn</Text>
           <Text style={styles.headline}>Find where your lives{'\n'}overlap.</Text>
           <Text style={styles.tagline}>The flatmate app designed to be deleted.</Text>
-          <Text style={styles.launchNote}>Launching this Sunday 🚀</Text>
         </Animated.View>
 
         {/* bottom: buttons */}
@@ -127,7 +126,6 @@ const styles = StyleSheet.create({
   appName: { fontFamily: 'SpaceGrotesk_600SemiBold', fontSize: 22, color: '#fff', letterSpacing: -0.4 },
   headline: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 34, color: '#fff', textAlign: 'center', letterSpacing: -1.2, lineHeight: 40, marginTop: 2 },
   tagline: { fontSize: 15, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 22 },
-  launchNote: { fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', letterSpacing: 0.2, marginTop: 6 },
   bottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 28, gap: 12, zIndex: 2 },
   primaryBtn: { borderRadius: 50, overflow: 'hidden' },
   gradientBtn: { paddingVertical: 18, alignItems: 'center', borderRadius: 50 },
